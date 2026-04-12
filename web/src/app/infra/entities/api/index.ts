@@ -1,0 +1,609 @@
+import { IDynamicFormItemSchema } from '@/app/infra/entities/form/dynamic';
+import { PipelineConfigTab } from '@/app/infra/entities/pipeline';
+import { I18nObject } from '@/app/infra/entities/common';
+import { Message } from '@/app/infra/entities/message';
+import { Plugin, PluginV4 } from '@/app/infra/entities/plugin';
+
+export interface ApiResponse<T> {
+  code: number;
+  data: T;
+  msg: string;
+}
+
+export interface AsyncTaskCreatedResp {
+  task_id: number;
+}
+
+export interface ApiRespProviderRequesters {
+  requesters: Requester[];
+}
+
+export interface ApiRespProviderRequester {
+  requester: Requester;
+}
+
+export interface Requester {
+  name: string;
+  label: I18nObject;
+  description: I18nObject;
+  icon?: string;
+  spec: {
+    config: IDynamicFormItemSchema[];
+    provider_category: string;
+  };
+}
+
+export interface ApiRespProviderLLMModels {
+  models: LLMModel[];
+}
+
+export interface ApiRespProviderLLMModel {
+  model: LLMModel;
+}
+
+export interface ModelProvider {
+  uuid: string;
+  name: string;
+  requester: string;
+  base_url: string;
+  api_keys: string[];
+  llm_count?: number;
+  embedding_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ApiRespModelProviders {
+  providers: ModelProvider[];
+}
+
+export interface ApiRespModelProvider {
+  provider: ModelProvider;
+}
+
+export interface LLMModel {
+  uuid: string;
+  name: string;
+  provider_uuid: string;
+  provider?: ModelProvider;
+  abilities?: string[];
+  extra_args?: object;
+}
+
+export interface ApiRespProviderEmbeddingModels {
+  models: EmbeddingModel[];
+}
+
+export interface ApiRespProviderEmbeddingModel {
+  model: EmbeddingModel;
+}
+
+export interface EmbeddingModel {
+  uuid: string;
+  name: string;
+  provider_uuid: string;
+  provider?: ModelProvider;
+  extra_args?: object;
+}
+
+export interface ApiRespPipelines {
+  pipelines: Pipeline[];
+}
+
+export interface Pipeline {
+  uuid?: string;
+  name: string;
+  description: string;
+  for_version?: string;
+  config: object;
+  stages?: string[];
+  is_default?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  emoji?: string;
+}
+
+export interface ApiRespPlatformAdapters {
+  adapters: Adapter[];
+}
+
+export interface ApiRespPlatformAdapter {
+  adapter: Adapter;
+}
+
+export interface Adapter {
+  name: string;
+  label: I18nObject;
+  description: I18nObject;
+  icon?: string;
+  spec: {
+    categories?: string[];
+    help_links?: Record<string, string>;
+    config: IDynamicFormItemSchema[];
+  };
+}
+
+export interface ApiRespPlatformBots {
+  bots: Bot[];
+}
+
+export interface ApiRespPlatformBot {
+  bot: Bot;
+}
+
+export interface ServiceDeskBotConfig {
+  bot_uuid: string;
+  version_label: string;
+  handoff_keywords: string[];
+  fallback_unresolved_count: number;
+  manual_timeout_seconds: number;
+  enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ServiceDeskBotConfigUpdatePayload = Pick<
+  ServiceDeskBotConfig,
+  'version_label' | 'handoff_keywords' | 'manual_timeout_seconds' | 'enabled'
+>;
+
+export interface ServiceDeskMaterial {
+  uuid: string;
+  bot_uuid: string;
+  material_type: string;
+  title: string;
+  trigger_keywords: string[];
+  reply_text: string;
+  payload: Record<string, unknown>;
+  priority: number;
+  enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ServiceDeskSessionMode = 'ai_hosted' | 'manual' | 'ai_assist';
+
+export type ServiceDeskQueueStatus =
+  | 'pending_manual'
+  | 'manual'
+  | 'silent'
+  | 'ai';
+
+export interface ServiceDeskSession {
+  session_id: string;
+  bot_uuid: string;
+  pipeline_uuid: string;
+  mode: ServiceDeskSessionMode;
+  queue_status: ServiceDeskQueueStatus;
+  handoff_reason?: string | null;
+  source_entry_id: string;
+  external_user_id: string;
+  last_message_id?: string | null;
+  claimed_by_user_uuid?: string | null;
+  claimed_by_user_name?: string | null;
+  manual_claimed_at?: string | null;
+  silent_since?: string | null;
+  last_customer_message_at?: string | null;
+  last_manual_reply_at?: string | null;
+  unresolved_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ServiceDeskAssistDraft {
+  session_id: string;
+  reply_text: string;
+  source: 'ai_assist';
+  sent: false;
+  operator_user_id: string;
+}
+
+export interface ServiceDeskTimelineMessage {
+  id: string;
+  timestamp?: string;
+  bot_id?: string;
+  bot_name?: string;
+  pipeline_id?: string;
+  pipeline_name?: string;
+  message_content: string;
+  session_id: string;
+  status?: string;
+  level?: string;
+  platform?: string | null;
+  user_id?: string | null;
+  user_name?: string | null;
+  runner_name?: string | null;
+  variables?: string | null;
+  role?: string | null;
+}
+
+export interface ServiceDeskSessionDetail {
+  session: ServiceDeskSession;
+  messages: ServiceDeskTimelineMessage[];
+  bot: {
+    uuid: string;
+    name?: string | null;
+  };
+  assist_draft: ServiceDeskAssistDraft | null;
+}
+
+export type ServiceDeskQuickReply = ServiceDeskMaterial;
+
+export interface ServiceDeskSessionQuery {
+  botUuid?: string;
+  queueStatus?: ServiceDeskQueueStatus;
+  claimedBy?: string;
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface Bot {
+  uuid?: string;
+  name: string;
+  description: string;
+  enable?: boolean;
+  adapter: string;
+  adapter_config: object;
+  use_pipeline_name?: string;
+  use_pipeline_uuid?: string;
+  pipeline_routing_rules?: PipelineRoutingRule[];
+  created_at?: string;
+  updated_at?: string;
+  adapter_runtime_values?: object;
+}
+
+export type RoutingRuleOperator =
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'regex';
+
+export interface PipelineRoutingRule {
+  type:
+    | 'launcher_type'
+    | 'launcher_id'
+    | 'message_content'
+    | 'message_has_element';
+  operator: RoutingRuleOperator;
+  value: string;
+  pipeline_uuid: string;
+}
+
+export interface ApiRespKnowledgeBases {
+  bases: KnowledgeBase[];
+}
+
+export interface ApiRespKnowledgeBase {
+  base: KnowledgeBase;
+}
+
+export interface KnowledgeBase {
+  uuid?: string;
+  name: string;
+  description: string;
+  created_at?: string;
+  updated_at?: string;
+  emoji?: string;
+  // New unified fields
+  knowledge_engine_plugin_id?: string;
+  creation_settings?: Record<string, unknown>;
+  retrieval_settings?: Record<string, unknown>;
+  knowledge_engine?: KnowledgeEngineInfo;
+}
+
+// Knowledge Engine types
+export interface KnowledgeEngineInfo {
+  plugin_id: string | null;
+  name: I18nObject;
+  capabilities: string[];
+}
+
+export interface KnowledgeEngine {
+  plugin_id: string;
+  name: I18nObject;
+  description?: I18nObject;
+  capabilities: string[];
+  // Schema format: Array of form field definitions (IDynamicFormItemSchema-like)
+  // Each item: { name, label, type, required, default, description?, options? }
+  creation_schema?: unknown[];
+  retrieval_schema?: unknown[];
+}
+
+export interface ApiRespKnowledgeEngines {
+  engines: KnowledgeEngine[];
+}
+
+export interface ParserInfo {
+  plugin_id: string;
+  name: I18nObject;
+  description?: I18nObject;
+  supported_mime_types: string[];
+}
+
+export interface ApiRespParsers {
+  parsers: ParserInfo[];
+}
+
+export interface ApiRespKnowledgeBaseFiles {
+  files: KnowledgeBaseFile[];
+}
+
+export interface KnowledgeBaseFile {
+  uuid: string;
+  file_name: string;
+  status: string;
+}
+
+// plugins
+export interface ApiRespPlugins {
+  plugins: Plugin[];
+}
+
+export interface ApiRespPlugin {
+  plugin: Plugin;
+}
+
+// export interface Plugin {
+//   author: string;
+//   name: string;
+//   description: I18nLabel;
+//   label: I18nLabel;
+//   version: string;
+//   enabled: boolean;
+//   priority: number;
+//   status: string;
+//   tools: object[];
+//   event_handlers: object;
+//   main_file: string;
+//   pkg_path: string;
+//   repository: string;
+//   config_schema: IDynamicFormItemSchema[];
+// }
+
+export interface ApiRespPluginConfig {
+  config: object;
+}
+
+export interface PluginReorderElement {
+  author: string;
+  name: string;
+  priority: number;
+}
+
+// system
+export interface SystemLimitation {
+  max_bots: number;
+  max_pipelines: number;
+  max_extensions: number;
+}
+
+export interface WizardProgress {
+  step: number;
+  selected_adapter: string | null;
+  created_bot_uuid: string | null;
+  bot_saved: boolean;
+  selected_runner: string | null;
+}
+
+export interface ApiRespSystemInfo {
+  debug: boolean;
+  version: string;
+  edition: string;
+  cloud_service_url: string;
+  enable_marketplace: boolean;
+  allow_modify_login_info: boolean;
+  disable_models_service: boolean;
+  limitation: SystemLimitation;
+  wizard_status: string; // 'none' | 'skipped' | 'completed'
+  wizard_progress: WizardProgress | null;
+}
+
+export interface RagMigrationStatusResp {
+  needed: boolean;
+  internal_kb_count: number;
+  external_kb_count: number;
+}
+
+export interface ApiRespPluginSystemStatus {
+  is_enable: boolean;
+  is_connected: boolean;
+  plugin_connector_error: string;
+}
+
+export interface ApiRespAsyncTasks {
+  tasks: AsyncTask[];
+}
+
+export interface AsyncTaskRuntimeInfo {
+  done: boolean;
+  exception?: string;
+  result?: object;
+  state: string;
+}
+
+export interface AsyncTaskTaskContext {
+  current_action: string;
+  log: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AsyncTask {
+  id: number;
+  kind: string;
+  name: string;
+  label: string;
+  task_type: string; // system or user
+  runtime: AsyncTaskRuntimeInfo;
+  task_context: AsyncTaskTaskContext;
+}
+
+export interface ApiRespUserToken {
+  token: string;
+}
+
+export interface ApiRespMarketplacePlugins {
+  plugins: PluginV4[];
+  total: number;
+}
+
+export interface ApiRespMarketplacePluginDetail {
+  plugin: PluginV4;
+}
+
+interface GetPipelineConfig {
+  ai: object;
+  output: object;
+  safety: object;
+  trigger: object;
+}
+
+interface GetPipeline {
+  config: GetPipelineConfig;
+  created_at: string;
+  description: string;
+  for_version: string;
+  is_default: boolean;
+  name: string;
+  stages: string[];
+  updated_at: string;
+  uuid: string;
+  emoji?: string;
+}
+
+export interface GetPipelineResponseData {
+  pipeline: GetPipeline;
+}
+
+export interface GetPipelineMetadataResponseData {
+  configs: PipelineConfigTab[];
+}
+
+export interface ApiRespWebChatMessage {
+  message: Message;
+}
+
+export interface ApiRespWebChatMessages {
+  messages: Message[];
+}
+
+export interface RetrieveResultContent {
+  type: 'text' | 'image_url' | 'image_base64' | 'file_url';
+  text?: string;
+  file_name?: string;
+  file_url?: string;
+  image_url?: string;
+  image_base64?: string;
+}
+
+export interface RetrieveResult {
+  id: string;
+  content?: RetrieveResultContent[];
+  metadata: {
+    file_id?: string;
+    text?: string;
+    uuid?: string;
+    [key: string]: unknown;
+  };
+  distance: number;
+}
+
+export interface ApiRespKnowledgeBaseRetrieve {
+  results: RetrieveResult[];
+}
+
+// MCP
+export interface ApiRespMCPServers {
+  servers: MCPServer[];
+}
+
+export interface ApiRespMCPServer {
+  server: MCPServer;
+}
+
+export interface MCPServerExtraArgsSSE {
+  url: string;
+  headers: Record<string, string>;
+  timeout: number;
+  ssereadtimeout: number;
+}
+
+export interface MCPServerExtraArgsStdio {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export interface MCPServerExtraArgsHttp {
+  url: string;
+  headers: Record<string, string>;
+  timeout: number;
+}
+
+export enum MCPSessionStatus {
+  CONNECTING = 'connecting',
+  CONNECTED = 'connected',
+  ERROR = 'error',
+}
+
+export interface MCPServerRuntimeInfo {
+  status: MCPSessionStatus;
+  error_message?: string;
+  tool_count: number;
+  tools: MCPTool[];
+}
+
+export type MCPServer =
+  | {
+      uuid?: string;
+      name: string;
+      mode: 'sse';
+      enable: boolean;
+      extra_args: MCPServerExtraArgsSSE;
+      runtime_info?: MCPServerRuntimeInfo;
+      created_at?: string;
+      updated_at?: string;
+    }
+  | {
+      uuid?: string;
+      name: string;
+      mode: 'http';
+      enable: boolean;
+      extra_args: MCPServerExtraArgsHttp;
+      runtime_info?: MCPServerRuntimeInfo;
+      created_at?: string;
+      updated_at?: string;
+    }
+  | {
+      uuid?: string;
+      name: string;
+      mode: 'stdio';
+      enable: boolean;
+      extra_args: MCPServerExtraArgsStdio;
+      runtime_info?: MCPServerRuntimeInfo;
+      created_at?: string;
+      updated_at?: string;
+    };
+
+export interface MCPTool {
+  name: string;
+  description: string;
+  parameters?: object;
+}
+
+export interface PluginTool {
+  name: string;
+  description: string;
+  human_desc: string;
+  parameters: object;
+}
+
+export interface ApiRespTools {
+  tools: PluginTool[];
+}
+
+export interface ApiRespToolDetail {
+  tool: PluginTool;
+}

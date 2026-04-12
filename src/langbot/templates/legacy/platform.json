@@ -1,0 +1,69 @@
+{
+    "platform-adapters": [
+        {
+            "adapter": "wecom",
+            "enable": false,
+            "host": "0.0.0.0",
+            "port": 2290,
+            "corpid": "",
+            "secret": "",
+            "token": "",
+            "EncodingAESKey": "",
+            "contacts_secret": ""
+        },
+        {
+            "adapter": "lark",
+            "enable": false,
+            "app_id": "cli_abcdefgh",
+            "app_secret": "XXXXXXXXXX",
+            "bot_name": "LangBot",
+            "enable-webhook": false,
+            "port": 2285,
+            "encrypt-key": "xxxxxxxxx"
+        },
+        {
+            "adapter": "gewechat",
+            "enable": false,
+            "gewechat_url": "http://your-gewechat-server:2531",
+            "gewechat_file_url": "http://your-gewechat-server:2532",
+            "port": 2286,
+            "callback_url": "http://your-callback-url:2286/gewechat/callback",
+            "app_id": "",
+            "token": ""
+        },
+        {
+            "adapter": "officialaccount",
+            "enable": false,
+            "token": "",
+            "EncodingAESKey": "",
+            "AppID": "",
+            "AppSecret": "",
+            "Mode": "drop",
+            "LoadingMessage": "AI正在思考中，请发送任意内容获取回复。",
+            "host": "0.0.0.0",
+            "port": 2287
+        },
+        {
+            "adapter": "wecomcs",
+            "enable": false,
+            "port": 2289,
+            "corpid": "",
+            "secret": "",
+            "token": "",
+            "EncodingAESKey": ""
+        }
+    ],
+    "track-function-calls": true,
+    "quote-origin": false,
+    "at-sender": false,
+    "force-delay": {
+        "min": 0,
+        "max": 0
+    },
+    "long-text-process": {
+        "threshold": 2560,
+        "strategy": "forward",
+        "font-path": ""
+    },
+    "hide-exception-info": true
+}
