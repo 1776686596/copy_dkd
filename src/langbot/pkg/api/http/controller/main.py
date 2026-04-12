@@ -26,6 +26,16 @@ importutil.import_modules_in_pkg(groups_knowledge)
 importutil.import_modules_in_pkg(groups_resources)
 
 
+def _is_static_asset_request(path: str) -> bool:
+    """判断路径是否指向前端静态资源文件。"""
+    if path.startswith('assets/'):
+        return True
+
+    basename = os.path.basename(path)
+    _, extension = os.path.splitext(basename)
+    return bool(extension)
+
+
 class HTTPController:
     ap: app.Application
 
@@ -98,6 +108,13 @@ class HTTPController:
             response.headers['Expires'] = '0'
             return response
 
+        async def frontend_404():
+            response = await quart.send_from_directory(frontend_path, '404.html')
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response, 404
+
         @self.quart_app.route('/<path:path>')
         async def static_file(path: str):
             if not (
@@ -105,7 +122,7 @@ class HTTPController:
             ):
                 if os.path.exists(os.path.join(frontend_path, path + '.html')):
                     path += '.html'
-                elif not path.startswith('api/'):
+                elif not path.startswith('api/') and not _is_static_asset_request(path):
                     # SPA fallback: serve index.html for all non-API, non-static routes
                     # so that React Router can handle client-side routing (Vite SPA).
                     # For /home/* sub-routes, first try parent .html files (pre-rendered pages).
@@ -129,7 +146,7 @@ class HTTPController:
                     response.headers['Expires'] = '0'
                     return response
                 else:
-                    return await quart.send_from_directory(frontend_path, '404.html')
+                    return await frontend_404()
 
             mimetype = None
 
