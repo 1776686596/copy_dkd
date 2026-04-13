@@ -61,6 +61,9 @@ class BotService:
                 get_state = getattr(getattr(runtime_bot.adapter, 'bot', None), 'get_login_runtime_state', None)
                 if callable(get_state):
                     adapter_runtime_values.update(get_state())
+                adapter_runtime_values.setdefault('login_required', False)
+                adapter_runtime_values.setdefault('login_qr_image_base64', None)
+                adapter_runtime_values.setdefault('login_qr_updated_at', None)
 
         # Webhook URL for unified webhook adapters (independent of bot running state)
         if persistence_bot['adapter'] in [
@@ -82,10 +85,6 @@ class BotService:
             adapter_runtime_values['webhook_url'] = None
             adapter_runtime_values['webhook_full_url'] = None
             adapter_runtime_values['extra_webhook_full_url'] = None
-
-        adapter_runtime_values.setdefault('login_required', False)
-        adapter_runtime_values.setdefault('login_qr_image_base64', None)
-        adapter_runtime_values.setdefault('login_qr_updated_at', None)
 
         persistence_bot['adapter_runtime_values'] = adapter_runtime_values
 

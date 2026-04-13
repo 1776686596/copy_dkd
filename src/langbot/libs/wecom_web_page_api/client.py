@@ -133,7 +133,6 @@ class WecomWebPageClient:
         self._login_required = False
         self._login_qr_image_base64 = None
         self._login_qr_updated_at = None
-        self._last_qr_hash = None
 
     def _remember_message(self, payload: dict[str, Any]) -> bool:
         message_key = f"{payload['conversation_id']}:{payload['message_id']}"
