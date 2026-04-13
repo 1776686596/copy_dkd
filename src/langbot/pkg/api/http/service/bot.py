@@ -53,6 +53,10 @@ class BotService:
             raise Exception('Bot not found')
 
         adapter_runtime_values = {}
+        if persistence_bot['adapter'] == 'wecomweb':
+            adapter_runtime_values['login_required'] = False
+            adapter_runtime_values['login_qr_image_base64'] = None
+            adapter_runtime_values['login_qr_updated_at'] = None
 
         runtime_bot = await self.ap.platform_mgr.get_bot_by_uuid(bot_uuid)
         if runtime_bot is not None:
@@ -61,9 +65,6 @@ class BotService:
                 get_state = getattr(getattr(runtime_bot.adapter, 'bot', None), 'get_login_runtime_state', None)
                 if callable(get_state):
                     adapter_runtime_values.update(get_state())
-                adapter_runtime_values.setdefault('login_required', False)
-                adapter_runtime_values.setdefault('login_qr_image_base64', None)
-                adapter_runtime_values.setdefault('login_qr_updated_at', None)
 
         # Webhook URL for unified webhook adapters (independent of bot running state)
         if persistence_bot['adapter'] in [
