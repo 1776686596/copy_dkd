@@ -30,27 +30,40 @@ async def test_wecomweb_client_caches_login_qr_runtime_state(monkeypatch):
     }
 
 
-def test_wecomweb_client_clear_login_runtime_state_keeps_last_qr_hash():
+@pytest.mark.asyncio
+async def test_wecomweb_client_run_forever_prints_same_qr_again_after_login_restored(monkeypatch, capsys):
     from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    qr_png = b"fake-qr-png"
+    monkeypatch.setattr("langbot.libs.wecom_web_page_api.client.time.time", lambda: 1710000000)
 
     client = WecomWebPageClient(
         account_label="escort-account",
         workbench_url="https://work.weixin.qq.com/kf/",
         storage_state_dir="./tmp/wecomweb",
     )
-    client._login_required = True
-    client._login_qr_image_base64 = "cached-qr"
-    client._login_qr_updated_at = 1710000000
-    client._last_qr_hash = "existing-hash"
 
-    client._clear_login_runtime_state()
+    sleep_calls = 0
 
-    assert client.get_login_runtime_state() == {
-        "login_required": False,
-        "login_qr_image_base64": None,
-        "login_qr_updated_at": None,
-    }
-    assert client._last_qr_hash == "existing-hash"
+    async def fake_sleep(_seconds):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 3:
+            client._stop_event.set()
+
+    qr_locator = SimpleNamespace(screenshot=AsyncMock(return_value=qr_png))
+    client._ensure_browser = AsyncMock()
+    client._is_login_required = AsyncMock(side_effect=[True, False, True])
+    client._find_first_visible_locator = AsyncMock(return_value=qr_locator)
+    client._render_image_to_terminal = lambda image_bytes: "QR"
+    client._drain_send_queue = AsyncMock()
+    client._poll_once = AsyncMock()
+    monkeypatch.setattr("langbot.libs.wecom_web_page_api.client.asyncio.sleep", fake_sleep)
+
+    await client.run_forever()
+
+    output = capsys.readouterr().out
+    assert output.count("请使用企业微信扫码登录企微客服网页") == 2
 
 
 @pytest.mark.asyncio

@@ -175,6 +175,7 @@ class WecomWebPageClient:
                     await self._show_login_qr()
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
+                self._last_qr_hash = None
                 self._clear_login_runtime_state()
 
                 await self._drain_send_queue()
