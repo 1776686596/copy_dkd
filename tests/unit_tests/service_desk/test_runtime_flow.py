@@ -106,3 +106,52 @@ def test_wecomcs_adapter_extracts_service_desk_context():
         'external_user_id': 'user-001',
         'last_message_id': 'msg-001',
     }
+
+
+@pytest.mark.asyncio
+async def test_wecomweb_message_enters_service_desk_flow():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskDecision
+    from langbot.pkg.platform.botmgr import RuntimeBot
+
+    bot = object.__new__(RuntimeBot)
+    bot.bot_entity = SimpleNamespace(
+        adapter='wecomweb',
+        uuid='bot-1',
+        use_pipeline_uuid='pipeline-1',
+    )
+    bot.ap = Mock()
+    bot.logger = Mock()
+    bot.logger.info = AsyncMock()
+    bot.ap.service_desk_service = Mock()
+    bot.ap.service_desk_service.handle_incoming_message = AsyncMock(
+        return_value=ServiceDeskDecision(action='continue_ai')
+    )
+    bot.ap.service_desk_service.send_structured_reply = AsyncMock()
+
+    event = SimpleNamespace(
+        message_chain='我要下载链接',
+        sender=SimpleNamespace(id='customer-1', nickname='客户A'),
+    )
+    adapter = Mock()
+    adapter.get_launcher_id.return_value = 'escort-account:external-customer-1'
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'escort-account',
+        'external_user_id': 'external-customer-1',
+        'last_message_id': 'msg-1',
+    }
+
+    handled = await bot._handle_service_desk_before_pipeline(
+        event,
+        adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert handled is False
+    bot.ap.service_desk_service.handle_incoming_message.assert_awaited_once_with(
+        bot_entity=bot.bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )

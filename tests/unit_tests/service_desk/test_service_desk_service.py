@@ -122,3 +122,53 @@ def test_match_material_skips_disabled_material():
     matched = match_material('我要下载链接', materials)
 
     assert matched['title'] == '下载-启用'
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_message_accepts_any_adapter_with_service_desk_context():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    service = ServiceDeskService(Mock())
+    service._touch_session = AsyncMock(
+        return_value={
+            'session_id': 'person_customer-1',
+            'mode': 'ai_hosted',
+            'queue_status': 'ai',
+            'manual_claimed_at': None,
+            'silent_since': None,
+        }
+    )
+    service.get_bot_config = AsyncMock(return_value={'enabled': True})
+    service.list_materials = AsyncMock(return_value=[])
+
+    bot_entity = SimpleNamespace(
+        adapter='wecomweb',
+        uuid='bot-1',
+        use_pipeline_uuid='pipeline-1',
+    )
+    event = SimpleNamespace(
+        message_chain='你好',
+        source_platform_object=SimpleNamespace(),
+        sender=SimpleNamespace(id='customer-1', nickname='客户A'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'escort-account',
+        'external_user_id': 'external-customer-1',
+        'last_message_id': 'msg-1',
+    }
+    adapter.get_launcher_id.return_value = 'escort-account:external-customer-1'
+
+    decision = await service.handle_incoming_message(
+        bot_entity=bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert decision.action == 'continue_ai'
+    service._touch_session.assert_awaited_once()
+    service.list_materials.assert_awaited_once_with('bot-1')

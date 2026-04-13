@@ -213,9 +213,6 @@ class ServiceDeskService:
         adapter,
         pipeline_uuid: str | None = None,
     ) -> ServiceDeskDecision:
-        if getattr(bot_entity, 'adapter', None) != 'wecomcs':
-            return ServiceDeskDecision(action='continue_ai')
-
         if not hasattr(adapter, 'extract_service_desk_context'):
             return ServiceDeskDecision(action='continue_ai')
 

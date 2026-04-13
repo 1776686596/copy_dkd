@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: MessagePlatformAdapter
+metadata:
+  name: wecomweb
+  label:
+    en_US: WeComCustomerService
+    zh_Hans: 企业微信客服
+    zh_Hant: 企業微信客服
+  description:
+    en_US: WeCom customer service page escort mode for demo usage
+    zh_Hans: 企业微信客服网页托管模式，用于演示期的非官方接入
+    zh_Hant: 企業微信客服網頁託管模式，用於演示期的非官方接入
+  icon: wecom.png
+spec:
+  categories:
+    - china
+  config:
+    - name: account_label
+      label:
+        en_US: Account Label
+        zh_Hans: 账号标识
+        zh_Hant: 帳號標識
+      description:
+        en_US: Internal label used to build service desk session identifiers
+        zh_Hans: 用于构造客服台会话标识的内部账号名
+        zh_Hant: 用於構造客服台會話標識的內部帳號名
+      type: string
+      required: true
+      default: "企微客服托管号"
+    - name: workbench_url
+      label:
+        en_US: Workbench URL
+        zh_Hans: 工作台地址
+        zh_Hant: 工作台地址
+      description:
+        en_US: Customer service workbench page URL for WeCom web login
+        zh_Hans: 企业微信客服网页工作台地址
+        zh_Hant: 企業微信客服網頁工作台地址
+      type: string
+      required: true
+      default: "https://work.weixin.qq.com/kf/"
+    - name: storage_state_dir
+      label:
+        en_US: Browser State Directory
+        zh_Hans: 浏览器登录态目录
+        zh_Hant: 瀏覽器登入態目錄
+      description:
+        en_US: Directory for Chromium persistent context and login session state
+        zh_Hans: Chromium 持久化上下文与登录态保存目录
+        zh_Hant: Chromium 持久化上下文與登入態保存目錄
+      type: string
+      required: true
+      default: "./data/wecomweb"
+    - name: poll_interval_seconds
+      label:
+        en_US: Poll Interval Seconds
+        zh_Hans: 监听间隔（秒）
+        zh_Hant: 監聽間隔（秒）
+      description:
+        en_US: Interval for polling WeCom web page messages
+        zh_Hans: 轮询企微网页消息的间隔秒数
+        zh_Hant: 輪詢企微網頁訊息的間隔秒數
+      type: integer
+      required: false
+      default: 2
+    - name: headless
+      label:
+        en_US: Headless Browser
+        zh_Hans: 无头浏览器
+        zh_Hant: 無頭瀏覽器
+      description:
+        en_US: Run Chromium in headless mode on Linux servers
+        zh_Hans: 在 Linux 服务器上以无头模式运行 Chromium
+        zh_Hant: 在 Linux 伺服器上以無頭模式執行 Chromium
+      type: boolean
+      required: false
+      default: true
+    - name: print_login_qr
+      label:
+        en_US: Print Login QR
+        zh_Hans: 终端打印登录二维码
+        zh_Hant: 終端列印登入二維碼
+      description:
+        en_US: Print the login QR to terminal when the web session expires
+        zh_Hans: 登录态失效时在终端打印二维码便于扫码
+        zh_Hant: 登入態失效時在終端列印二維碼便於掃碼
+      type: boolean
+      required: false
+      default: true
+execution:
+  python:
+    path: ./wecomweb.py
+    attr: WecomWebAdapter
