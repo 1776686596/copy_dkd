@@ -147,7 +147,9 @@ export default function BotForm({
   const [loginQrImageBase64, setLoginQrImageBase64] = useState<string | null>(
     null,
   );
+  const [loginQrLoadError, setLoginQrLoadError] = useState<string | null>(null);
   const loginPollingRef = useRef<number | null>(null);
+  const loginRequestTokenRef = useRef(0);
 
   // Watch adapter and adapter_config for filtering
   const currentAdapter = form.watch('adapter');
@@ -173,22 +175,34 @@ export default function BotForm({
 
   useEffect(() => {
     if (!initBotId || currentAdapter !== 'wecomweb') {
+      loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
       setLoginRequired(false);
       setLoginQrImageBase64(null);
+      setLoginQrLoadError(null);
       return;
     }
 
     const botId = initBotId;
-    refreshWecomWebLoginState(botId);
-    loginPollingRef.current = window.setInterval(() => {
-      refreshWecomWebLoginState(botId);
-    }, 3000);
+    const requestToken = loginRequestTokenRef.current + 1;
+    loginRequestTokenRef.current = requestToken;
+    clearWecomWebLoginPolling();
+    refreshWecomWebLoginState(botId, requestToken);
 
     return () => {
+      loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
     };
   }, [currentAdapter, initBotId]);
+
+  function startWecomWebLoginPolling(botId: string, requestToken: number) {
+    if (loginPollingRef.current !== null) {
+      return;
+    }
+    loginPollingRef.current = window.setInterval(() => {
+      refreshWecomWebLoginState(botId, requestToken);
+    }, 3000);
+  }
 
   function clearWecomWebLoginPolling() {
     if (loginPollingRef.current !== null) {
@@ -197,18 +211,31 @@ export default function BotForm({
     }
   }
 
-  async function refreshWecomWebLoginState(botId: string) {
+  async function refreshWecomWebLoginState(botId: string, requestToken: number) {
     try {
       const res = await httpClient.getBot(botId);
+      if (loginRequestTokenRef.current !== requestToken) {
+        return;
+      }
       const runtimeValues = res.bot.adapter_runtime_values;
       const nextLoginRequired = runtimeValues?.login_required === true;
 
       setLoginRequired(nextLoginRequired);
+      setLoginQrLoadError(null);
       setLoginQrImageBase64(
         nextLoginRequired ? runtimeValues?.login_qr_image_base64 ?? null : null,
       );
+      if (nextLoginRequired) {
+        startWecomWebLoginPolling(botId, requestToken);
+      } else {
+        clearWecomWebLoginPolling();
+      }
     } catch (err) {
-      console.error('刷新 wecomweb 登录二维码状态失败', err);
+      if (loginRequestTokenRef.current !== requestToken) {
+        return;
+      }
+      clearWecomWebLoginPolling();
+      setLoginQrLoadError('登录状态拉取失败，请稍后刷新页面重试');
     }
   }
 
@@ -678,11 +705,19 @@ export default function BotForm({
                   {loginQrImageBase64 ? (
                     <div className="flex justify-center rounded-md bg-background p-4">
                       <img
-                        src={loginQrImageBase64}
+                        src={
+                          loginQrImageBase64
+                            ? `data:image/png;base64,${loginQrImageBase64}`
+                            : undefined
+                        }
                         alt="企业微信网页登录二维码"
                         className="h-56 w-56 max-w-full"
                       />
                     </div>
+                  ) : loginQrLoadError ? (
+                    <p className="text-sm text-muted-foreground">
+                      {loginQrLoadError}
+                    </p>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       正在生成登录二维码
