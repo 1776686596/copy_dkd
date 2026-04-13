@@ -143,6 +143,11 @@ export default function BotForm({
   const [, setIsLoading] = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState<string>('');
   const [extraWebhookUrl, setExtraWebhookUrl] = useState<string>('');
+  const [loginRequired, setLoginRequired] = useState<boolean>(false);
+  const [loginQrImageBase64, setLoginQrImageBase64] = useState<string | null>(
+    null,
+  );
+  const loginPollingRef = useRef<number | null>(null);
 
   // Watch adapter and adapter_config for filtering
   const currentAdapter = form.watch('adapter');
@@ -165,6 +170,47 @@ export default function BotForm({
   useEffect(() => {
     setBotFormValuesRef.current();
   }, []);
+
+  useEffect(() => {
+    if (!initBotId || currentAdapter !== 'wecomweb') {
+      clearWecomWebLoginPolling();
+      setLoginRequired(false);
+      setLoginQrImageBase64(null);
+      return;
+    }
+
+    const botId = initBotId;
+    refreshWecomWebLoginState(botId);
+    loginPollingRef.current = window.setInterval(() => {
+      refreshWecomWebLoginState(botId);
+    }, 3000);
+
+    return () => {
+      clearWecomWebLoginPolling();
+    };
+  }, [currentAdapter, initBotId]);
+
+  function clearWecomWebLoginPolling() {
+    if (loginPollingRef.current !== null) {
+      window.clearInterval(loginPollingRef.current);
+      loginPollingRef.current = null;
+    }
+  }
+
+  async function refreshWecomWebLoginState(botId: string) {
+    try {
+      const res = await httpClient.getBot(botId);
+      const runtimeValues = res.bot.adapter_runtime_values;
+      const nextLoginRequired = runtimeValues?.login_required === true;
+
+      setLoginRequired(nextLoginRequired);
+      setLoginQrImageBase64(
+        nextLoginRequired ? runtimeValues?.login_qr_image_base64 ?? null : null,
+      );
+    } catch (err) {
+      console.error('刷新 wecomweb 登录二维码状态失败', err);
+    }
+  }
 
   function setBotFormValues() {
     isInitializing.current = true;
@@ -287,9 +333,7 @@ export default function BotForm({
         .getBot(botId)
         .then((res) => {
           const bot = res.bot;
-          const runtimeValues = bot.adapter_runtime_values as
-            | Record<string, unknown>
-            | undefined;
+          const runtimeValues = bot.adapter_runtime_values;
           resolve({
             adapter: bot.adapter,
             description: bot.description,
@@ -298,12 +342,9 @@ export default function BotForm({
             enable: bot.enable ?? true,
             use_pipeline_uuid: bot.use_pipeline_uuid ?? '',
             pipeline_routing_rules: bot.pipeline_routing_rules ?? [],
-            webhook_full_url: runtimeValues?.webhook_full_url as
-              | string
-              | undefined,
-            extra_webhook_full_url: runtimeValues?.extra_webhook_full_url as
-              | string
-              | undefined,
+            webhook_full_url: runtimeValues?.webhook_full_url ?? undefined,
+            extra_webhook_full_url:
+              runtimeValues?.extra_webhook_full_url ?? undefined,
           });
         })
         .catch((err) => {
@@ -622,6 +663,33 @@ export default function BotForm({
                   extra_webhook_url: extraWebhookUrl,
                 }}
               />
+            )}
+
+            {initBotId && currentAdapter === 'wecomweb' && loginRequired && (
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-sm font-medium">企业微信网页登录</p>
+                    <p className="text-sm text-muted-foreground">
+                      请使用企业微信扫码完成当前 Bot 的网页登录授权。
+                    </p>
+                  </div>
+
+                  {loginQrImageBase64 ? (
+                    <div className="flex justify-center rounded-md bg-background p-4">
+                      <img
+                        src={loginQrImageBase64}
+                        alt="企业微信网页登录二维码"
+                        className="h-56 w-56 max-w-full"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      正在生成登录二维码
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

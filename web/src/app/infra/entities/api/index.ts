@@ -131,6 +131,16 @@ export interface ApiRespPlatformBot {
   bot: Bot;
 }
 
+export interface BotAdapterRuntimeValues {
+  bot_account_id?: string | null;
+  webhook_url?: string | null;
+  webhook_full_url?: string | null;
+  extra_webhook_full_url?: string | null;
+  login_required?: boolean;
+  login_qr_image_base64?: string | null;
+  login_qr_updated_at?: number | null;
+}
+
 export interface ServiceDeskBotConfig {
   bot_uuid: string;
   version_label: string;
@@ -250,7 +260,7 @@ export interface Bot {
   pipeline_routing_rules?: PipelineRoutingRule[];
   created_at?: string;
   updated_at?: string;
-  adapter_runtime_values?: object;
+  adapter_runtime_values?: BotAdapterRuntimeValues;
 }
 
 export type RoutingRuleOperator =
