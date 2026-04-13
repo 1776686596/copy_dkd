@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import io
 import json
@@ -92,6 +93,9 @@ class WecomWebPageClient:
         self._conversation_keys: dict[str, str] = {}
         self._recent_outbound_texts: dict[str, str] = {}
         self._last_qr_hash: str | None = None
+        self._login_required = False
+        self._login_qr_image_base64: str | None = None
+        self._login_qr_updated_at: int | None = None
 
     @staticmethod
     def _as_bool(value: Any, default: bool) -> bool:
@@ -117,6 +121,19 @@ class WecomWebPageClient:
 
     def set_message_callback(self, callback):
         self._message_callback = callback
+
+    def get_login_runtime_state(self) -> dict[str, Any]:
+        return {
+            'login_required': self._login_required,
+            'login_qr_image_base64': self._login_qr_image_base64,
+            'login_qr_updated_at': self._login_qr_updated_at,
+        }
+
+    def _clear_login_runtime_state(self) -> None:
+        self._login_required = False
+        self._login_qr_image_base64 = None
+        self._login_qr_updated_at = None
+        self._last_qr_hash = None
 
     def _remember_message(self, payload: dict[str, Any]) -> bool:
         message_key = f"{payload['conversation_id']}:{payload['message_id']}"
@@ -159,6 +176,7 @@ class WecomWebPageClient:
                     await self._show_login_qr()
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
+                self._clear_login_runtime_state()
 
                 await self._drain_send_queue()
                 await self._poll_once()
@@ -210,19 +228,23 @@ class WecomWebPageClient:
         return input_locator is None
 
     async def _show_login_qr(self) -> None:
-        if not self.print_login_qr:
-            return
-
         qr_locator = await self._find_first_visible_locator(self.selectors['login_qr'])
         if qr_locator is None:
             return
 
         qr_png = await qr_locator.screenshot()
+        self._login_required = True
+        self._login_qr_image_base64 = base64.b64encode(qr_png).decode('ascii')
+        self._login_qr_updated_at = int(time.time())
+
         qr_hash = hashlib.sha1(qr_png).hexdigest()
         if qr_hash == self._last_qr_hash:
             return
 
         self._last_qr_hash = qr_hash
+        if not self.print_login_qr:
+            return
+
         print('\n请使用企业微信扫码登录企微客服网页：\n')
         print(self._render_image_to_terminal(qr_png))
         print('\n扫码成功后会自动继续监听消息。\n')
