@@ -100,6 +100,7 @@ class WecomWebPageClient:
         self._login_required = False
         self._login_qr_image_base64: str | None = None
         self._login_qr_updated_at: int | None = None
+        self._login_page_last_refreshed_at: int | None = None
 
     @staticmethod
     def _as_bool(value: Any, default: bool) -> bool:
@@ -179,10 +180,12 @@ class WecomWebPageClient:
             try:
                 await self._ensure_browser()
                 if await self._is_login_required():
+                    await self._refresh_login_page_if_needed()
                     await self._show_login_qr()
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
                 self._last_qr_hash = None
+                self._login_page_last_refreshed_at = None
                 self._clear_login_runtime_state(checked=True)
 
                 await self._drain_send_queue()
@@ -197,6 +200,21 @@ class WecomWebPageClient:
         self._stop_event.set()
         await self._reset_browser()
 
+    async def _refresh_login_page_if_needed(self) -> None:
+        if self._page is None:
+            return
+
+        now = int(time.time())
+        if self._login_page_last_refreshed_at is None:
+            self._login_page_last_refreshed_at = now
+            return
+
+        if now - self._login_page_last_refreshed_at < 30:
+            return
+
+        await self._page.reload(wait_until='domcontentloaded')
+        self._login_page_last_refreshed_at = now
+
     async def _reset_browser(self) -> None:
         if self._browser_context is not None:
             await self._browser_context.close()
@@ -206,6 +224,7 @@ class WecomWebPageClient:
         self._playwright = None
         self._browser_context = None
         self._page = None
+        self._login_page_last_refreshed_at = None
 
     async def _ensure_browser(self) -> None:
         if self._page is not None:

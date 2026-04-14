@@ -116,6 +116,41 @@ async def test_wecomweb_client_run_forever_prints_same_qr_again_after_login_rest
 
 
 @pytest.mark.asyncio
+async def test_wecomweb_client_refreshes_login_page_every_30_seconds_until_logged_in(monkeypatch):
+    from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    client = WecomWebPageClient(
+        account_label="escort-account",
+        workbench_url="https://work.weixin.qq.com/kf/",
+        storage_state_dir="./tmp/wecomweb",
+    )
+
+    sleep_calls = 0
+
+    async def fake_sleep(_seconds):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 3:
+            client._stop_event.set()
+
+    current_time = iter([100, 131])
+    monkeypatch.setattr("langbot.libs.wecom_web_page_api.client.time.time", lambda: next(current_time))
+    monkeypatch.setattr("langbot.libs.wecom_web_page_api.client.asyncio.sleep", fake_sleep)
+
+    client._page = SimpleNamespace(reload=AsyncMock())
+    client._ensure_browser = AsyncMock()
+    client._is_login_required = AsyncMock(side_effect=[True, True, False])
+    client._show_login_qr = AsyncMock()
+    client._drain_send_queue = AsyncMock()
+    client._poll_once = AsyncMock()
+
+    await client.run_forever()
+
+    client._page.reload.assert_awaited_once_with(wait_until="domcontentloaded")
+    assert client._login_page_last_refreshed_at is None
+
+
+@pytest.mark.asyncio
 async def test_get_runtime_bot_info_includes_wecomweb_login_runtime_state():
     from langbot.pkg.api.http.service.bot import BotService
 
