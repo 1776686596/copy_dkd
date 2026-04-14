@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import KBForm from '@/app/home/knowledge/components/kb-form/KBForm';
 import KBDoc from '@/app/home/knowledge/components/kb-docs/KBDoc';
+import KBEntries from '@/app/home/knowledge/components/kb-entries/KBEntries';
 import KBRetrieveGeneric from '@/app/home/knowledge/components/kb-retrieve/KBRetrieveGeneric';
 import { httpClient } from '@/app/infra/http/HttpClient';
 import { useSidebarData } from '@/app/home/components/home-sidebar/SidebarDataContext';
@@ -26,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { KnowledgeBase } from '@/app/infra/entities/api';
 import { CustomApiError } from '@/app/infra/entities/common';
 import { toast } from 'sonner';
-import { FileText, FolderOpen, Search, Trash2 } from 'lucide-react';
+import { FileText, FolderOpen, MessageSquareText, Search, Trash2 } from 'lucide-react';
 
 export default function KBDetailContent({ id }: { id: string }) {
   const isCreateMode = id === 'new';
@@ -35,7 +36,7 @@ export default function KBDetailContent({ id }: { id: string }) {
   const { refreshKnowledgeBases, knowledgeBases, setDetailEntityName } =
     useSidebarData();
 
-  // Set breadcrumb entity name
+  // 同步侧边栏详情页标题
   useEffect(() => {
     if (isCreateMode) {
       setDetailEntityName(t('knowledge.createKnowledgeBase'));
@@ -66,7 +67,7 @@ export default function KBDetailContent({ id }: { id: string }) {
     [t],
   );
 
-  // Load KB info for determining capabilities (e.g. doc_ingestion)
+  // 读取知识库信息，用于判断能力开关
   useEffect(() => {
     if (!isCreateMode) {
       loadKbInfo(id);
@@ -79,6 +80,9 @@ export default function KBDetailContent({ id }: { id: string }) {
       kbInfo.knowledge_engine.capabilities?.includes('doc_ingestion') ?? false
     );
   };
+
+  const isLocalFaqKnowledgeBase = (): boolean =>
+    kbInfo?.knowledge_engine?.plugin_id === 'builtin/local-faq';
 
   function handleKbDeleted() {
     refreshKnowledgeBases();
@@ -111,7 +115,25 @@ export default function KBDetailContent({ id }: { id: string }) {
     return await httpClient.retrieveKnowledgeBase(kbId, query);
   };
 
-  // ==================== Create Mode ====================
+  const getRetrieveResultTitle = (result: {
+    id: string;
+    metadata: Record<string, unknown>;
+  }) => {
+    if (isLocalFaqKnowledgeBase()) {
+      return (
+        (result.metadata.matched_question as string) ||
+        (result.metadata.source_file_id as string) ||
+        result.id
+      );
+    }
+    return (
+      (result.metadata.document_name as string) ||
+      (result.metadata.file_id as string) ||
+      result.id
+    );
+  };
+
+  // 创建模式
   if (isCreateMode) {
     return (
       <div className="flex h-full flex-col">
@@ -137,11 +159,11 @@ export default function KBDetailContent({ id }: { id: string }) {
     );
   }
 
-  // ==================== Edit Mode ====================
+  // 编辑模式
   return (
     <>
       <div className="flex h-full flex-col">
-        {/* Sticky Header: title + save button */}
+        {/* 顶部操作区 */}
         <div className="flex items-center justify-between pb-4 shrink-0">
           <h1 className="text-xl font-semibold">
             {t('knowledge.editKnowledgeBase')}
@@ -151,7 +173,7 @@ export default function KBDetailContent({ id }: { id: string }) {
           </Button>
         </div>
 
-        {/* Horizontal Tabs */}
+        {/* 标签页 */}
         <Tabs
           key={id}
           value={activeTab}
@@ -169,13 +191,19 @@ export default function KBDetailContent({ id }: { id: string }) {
                 {t('knowledge.documents')}
               </TabsTrigger>
             )}
+            {isLocalFaqKnowledgeBase() && (
+              <TabsTrigger value="entries" className="gap-1.5">
+                <MessageSquareText className="size-3.5" />
+                {t('knowledge.entries.tab')}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="retrieve" className="gap-1.5">
               <Search className="size-3.5" />
               {t('knowledge.retrieve')}
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab: Metadata */}
+          {/* 元数据 */}
           <TabsContent
             value="metadata"
             className="flex-1 min-h-0 overflow-y-auto mt-4"
@@ -188,7 +216,7 @@ export default function KBDetailContent({ id }: { id: string }) {
                 onDirtyChange={setFormDirty}
               />
 
-              {/* Danger Zone Card */}
+              {/* 危险操作区 */}
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">
@@ -223,7 +251,7 @@ export default function KBDetailContent({ id }: { id: string }) {
             </div>
           </TabsContent>
 
-          {/* Tab: Documents */}
+          {/* 文档 */}
           {hasDocumentCapability() && (
             <TabsContent
               value="documents"
@@ -231,23 +259,37 @@ export default function KBDetailContent({ id }: { id: string }) {
             >
               <KBDoc
                 kbId={id}
+                knowledgeEnginePluginId={kbInfo?.knowledge_engine?.plugin_id}
                 ragEngineName={kbInfo?.knowledge_engine?.name}
                 ragEngineCapabilities={kbInfo?.knowledge_engine?.capabilities}
               />
             </TabsContent>
           )}
 
-          {/* Tab: Retrieve */}
+          {isLocalFaqKnowledgeBase() && (
+            <TabsContent
+              value="entries"
+              className="flex-1 min-h-0 overflow-y-auto mt-4"
+            >
+              <KBEntries kbId={id} />
+            </TabsContent>
+          )}
+
+          {/* 检索 */}
           <TabsContent
             value="retrieve"
             className="flex-1 min-h-0 overflow-y-auto mt-4"
           >
-            <KBRetrieveGeneric kbId={id} retrieveFunction={retrieveFunction} />
+            <KBRetrieveGeneric
+              kbId={id}
+              retrieveFunction={retrieveFunction}
+              getResultTitle={getRetrieveResultTitle}
+            />
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* 删除确认弹窗 */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
           <DialogHeader>

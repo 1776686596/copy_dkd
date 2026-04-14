@@ -54,7 +54,7 @@ const getFormSchema = (t: (key: string) => string) =>
   });
 
 /**
- * Parse creation schema from Knowledge Engine to IDynamicFormItemSchema[]
+ * 把知识引擎返回的 schema 转成前端动态表单配置。
  */
 function parseCreationSchema(
   schemaItems: any | any[] | undefined,
@@ -102,7 +102,7 @@ export default function KBForm({
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Dirty tracking: snapshot of saved state for comparison
+  // 脏状态跟踪：记录上一次保存后的快照
   const savedSnapshotRef = useRef<string>('');
   const isInitializing = useRef(true);
 
@@ -118,12 +118,12 @@ export default function KBForm({
     },
   });
 
-  // Get selected engine details
+  // 当前选中的知识引擎
   const selectedEngine = ragEngines.find(
     (e) => e.plugin_id === selectedEngineId,
   );
 
-  // Dirty tracking: compare current form + dynamic settings against saved snapshot
+  // 对比当前表单和动态配置，判断是否有未保存变更
   const watchedFormValues = form.watch();
   useEffect(() => {
     if (!savedSnapshotRef.current || isInitializing.current) return;
@@ -178,7 +178,7 @@ export default function KBForm({
         setConfigSettings(kb.creation_settings || {});
         setRetrievalSettings(kb.retrieval_settings || {});
 
-        // Capture snapshot after a tick so dynamic forms have emitted initial values
+        // 等动态表单初始值回填后再记录快照，避免误判脏状态
         setTimeout(() => {
           captureSnapshot();
           isInitializing.current = false;
@@ -199,7 +199,7 @@ export default function KBForm({
     });
   }, [initKbId, loadKbConfig, loadRagEngines]);
 
-  // Auto-select first engine when engines are loaded and no selection
+  // 创建模式下自动选中第一个可用知识引擎
   useEffect(() => {
     if (ragEngines.length > 0 && !selectedEngineId && !isEditing) {
       const firstEngine = ragEngines[0];
@@ -289,7 +289,25 @@ export default function KBForm({
     [selectedEngine?.retrieval_schema],
   );
 
-  // Show loading state
+  const renderEngineLabel = (pluginId: string) => {
+    const [author, name] = pluginId.split('/');
+    const engine = ragEngines.find((item) => item.plugin_id === pluginId);
+
+    return (
+      <div className="flex items-center gap-2">
+        {author !== 'builtin' && (
+          <img
+            src={httpClient.getPluginIconURL(author, name)}
+            alt=""
+            className="h-5 w-5 rounded"
+          />
+        )}
+        <span>{engine ? extractI18nObject(engine.name) : pluginId}</span>
+      </div>
+    );
+  };
+
+  // 加载态
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -298,7 +316,7 @@ export default function KBForm({
     );
   }
 
-  // Show message if no engines available
+  // 没有可用知识引擎时的提示
   if (ragEngines.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
@@ -322,7 +340,7 @@ export default function KBForm({
         id="kb-form"
         className="space-y-6"
       >
-        {/* Card 1: Basic Information */}
+        {/* 基础信息 */}
         <Card>
           <CardHeader>
             <CardTitle>{t('knowledge.basicInfo')}</CardTitle>
@@ -331,7 +349,7 @@ export default function KBForm({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Name and Emoji in same row */}
+            {/* 名称和图标 */}
             <div className="flex gap-4 items-start">
               <FormField
                 control={form.control}
@@ -382,7 +400,7 @@ export default function KBForm({
               )}
             />
 
-            {/* Knowledge Engine Selector */}
+            {/* 知识引擎选择 */}
             <FormField
               control={form.control}
               name="ragEngineId"
@@ -403,29 +421,7 @@ export default function KBForm({
                     >
                       <SelectTrigger className="w-full bg-[#ffffff] dark:bg-[#2a2a2e]">
                         {field.value ? (
-                          (() => {
-                            const [author, name] = field.value.split('/');
-                            const engine = ragEngines.find(
-                              (e) => e.plugin_id === field.value,
-                            );
-                            return (
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={httpClient.getPluginIconURL(
-                                    author,
-                                    name,
-                                  )}
-                                  alt=""
-                                  className="h-5 w-5 rounded"
-                                />
-                                <span>
-                                  {engine
-                                    ? extractI18nObject(engine.name)
-                                    : field.value}
-                                </span>
-                              </div>
-                            );
-                          })()
+                          renderEngineLabel(field.value)
                         ) : (
                           <SelectValue
                             placeholder={t('knowledge.selectKnowledgeEngine')}
@@ -434,23 +430,12 @@ export default function KBForm({
                       </SelectTrigger>
                       <SelectContent className="fixed z-[1000]">
                         {ragEngines.map((engine) => {
-                          const [author, name] = engine.plugin_id.split('/');
                           return (
                             <SelectItem
                               key={engine.plugin_id}
                               value={engine.plugin_id}
                             >
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={httpClient.getPluginIconURL(
-                                    author,
-                                    name,
-                                  )}
-                                  alt=""
-                                  className="h-5 w-5 rounded"
-                                />
-                                <span>{extractI18nObject(engine.name)}</span>
-                              </div>
+                              {renderEngineLabel(engine.plugin_id)}
                             </SelectItem>
                           );
                         })}
@@ -474,7 +459,7 @@ export default function KBForm({
           </CardContent>
         </Card>
 
-        {/* Card 2: Engine Settings (dynamic form from creation_schema) */}
+        {/* 引擎设置 */}
         {configFormItems.length > 0 && (
           <Card>
             <CardHeader>
@@ -497,7 +482,7 @@ export default function KBForm({
           </Card>
         )}
 
-        {/* Card 3: Retrieval Settings (dynamic form from retrieval_schema) */}
+        {/* 检索设置 */}
         {retrievalFormItems.length > 0 && (
           <Card>
             <CardHeader>

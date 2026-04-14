@@ -341,10 +341,30 @@ export interface ApiRespKnowledgeBaseFiles {
   files: KnowledgeBaseFile[];
 }
 
+export interface ApiRespKnowledgeBaseEntries {
+  entries: KnowledgeBaseEntry[];
+}
+
+export interface ApiRespKnowledgeBaseEntry {
+  entry: KnowledgeBaseEntry | { uuid: string };
+}
+
 export interface KnowledgeBaseFile {
   uuid: string;
   file_name: string;
   status: string;
+}
+
+export interface KnowledgeBaseEntry {
+  uuid: string;
+  kb_id: string;
+  questions: string[];
+  answer: string;
+  source_file_id?: string | null;
+  enabled: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // plugins
@@ -515,6 +535,10 @@ export interface RetrieveResult {
     file_id?: string;
     text?: string;
     uuid?: string;
+    matched_question?: string;
+    source_file_id?: string;
+    local_faq_answer?: string;
+    final_answer?: string;
     [key: string]: unknown;
   };
   distance: number;

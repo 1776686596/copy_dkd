@@ -18,6 +18,7 @@ import { extractI18nObject } from '@/i18n/I18nProvider';
 
 interface FileUploadZoneProps {
   kbId: string;
+  knowledgeEnginePluginId?: string | null;
   ragEngineName?: I18nObject;
   ragEngineCapabilities?: string[];
   onUploadSuccess: () => void;
@@ -26,6 +27,7 @@ interface FileUploadZoneProps {
 
 export default function FileUploadZone({
   kbId,
+  knowledgeEnginePluginId,
   ragEngineName,
   ragEngineCapabilities,
   onUploadSuccess,
@@ -35,23 +37,28 @@ export default function FileUploadZone({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Parser selection state
+  // 解析器选择状态
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [availableParsers, setAvailableParsers] = useState<ParserInfo[]>([]);
   const [selectedParser, setSelectedParser] = useState<string>('builtin');
   const [loadingParsers, setLoadingParsers] = useState(false);
 
-  // Whether the Knowledge Engine natively supports document parsing.
-  // This is a coarse-grained capability check rather than per-MIME-type filtering.
-  // Fine-grained MIME type declaration (e.g. supported_parse_mime_types on the engine)
-  // would require changes across the SDK, backend, and frontend prop chain;
-  // using an engine-level capability flag keeps the change minimal.
+  // 知识引擎是否原生支持文档解析。
+  // 这里先按引擎能力做粗粒度判断，避免为了演示改动更多链路。
   const ragEngineCanParse =
     ragEngineCapabilities?.includes('doc_parsing') ?? false;
+  const isLocalFaqEngine = knowledgeEnginePluginId === 'builtin/local-faq';
 
-  // When a file is selected, check for available parsers
+  // 选择文件后，查询可用解析器
   useEffect(() => {
     if (!pendingFile) return;
+
+    if (isLocalFaqEngine) {
+      setAvailableParsers([]);
+      setSelectedParser('builtin');
+      setLoadingParsers(false);
+      return;
+    }
 
     const mimeType = pendingFile.type || undefined;
     setLoadingParsers(true);
@@ -74,7 +81,7 @@ export default function FileUploadZone({
       .finally(() => {
         setLoadingParsers(false);
       });
-  }, [pendingFile, ragEngineCanParse]);
+  }, [isLocalFaqEngine, pendingFile, ragEngineCanParse]);
 
   const doUpload = useCallback(
     async (file: File, parserPluginId?: string) => {
@@ -82,10 +89,10 @@ export default function FileUploadZone({
       const toastId = toast.loading(t('knowledge.documentsTab.uploadingFile'));
 
       try {
-        // Step 1: Upload file to server
+        // 1. 先上传原始文件
         const uploadResult = await httpClient.uploadDocumentFile(file);
 
-        // Step 2: Associate file with knowledge base (with optional parser)
+        // 2. 再把文件挂到知识库上，可选指定解析器
         await httpClient.uploadKnowledgeBaseFile(
           kbId,
           uploadResult.file_id,
@@ -117,23 +124,21 @@ export default function FileUploadZone({
     async (file: File) => {
       if (isUploading) return;
 
-      // Check file size (10MB limit)
+      // 文件大小限制 10MB
       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
       if (file.size > MAX_FILE_SIZE) {
         toast.error(t('knowledge.documentsTab.fileSizeExceeded'));
         return;
       }
 
-      // Set loadingParsers=true BEFORE pendingFile so both state updates
-      // batch together in the same render. This prevents the auto-upload
-      // effect from firing before parser fetch completes.
+      // 先置为加载中，避免自动上传逻辑早于解析器查询结果触发。
       setLoadingParsers(true);
       setPendingFile(file);
     },
     [isUploading, t],
   );
 
-  // Auto-upload if Knowledge Engine can parse and no external parsers available
+  // 若引擎可直接解析且无需额外解析器，则自动上传
   useEffect(() => {
     if (
       pendingFile &&
@@ -193,16 +198,17 @@ export default function FileUploadZone({
       if (files && files.length > 0) {
         handleFileSelected(files[0]);
       }
-      // Reset the input so the same file can be selected again
+      // 重置 input，允许再次选择同一个文件
       e.target.value = '';
     },
     [handleFileSelected],
   );
 
-  // Show parser selection UI when there are choices to make, or when no parser is available
+  // 需要用户选择解析器，或当前没有可用解析器时，显示选择区
   const showParserSelector =
     pendingFile &&
     !loadingParsers &&
+    !isLocalFaqEngine &&
     (availableParsers.length > 0 || !ragEngineCanParse);
 
   const noParserAvailable = !ragEngineCanParse && availableParsers.length === 0;
@@ -290,7 +296,11 @@ export default function FileUploadZone({
               id="file-upload"
               className="hidden"
               onChange={handleFileSelect}
-              accept=".pdf,.doc,.docx,.txt,.md,.html,.zip"
+              accept={
+                isLocalFaqEngine
+                  ? '.xlsx,.csv,.json'
+                  : '.pdf,.doc,.docx,.txt,.md,.html,.zip'
+              }
               disabled={isUploading || loadingParsers}
             />
 
@@ -319,7 +329,9 @@ export default function FileUploadZone({
                       : t('knowledge.documentsTab.dragAndDrop')}
                   </p>
                   <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
-                    {t('knowledge.documentsTab.supportedFormats')}
+                    {isLocalFaqEngine
+                      ? t('knowledge.documentsTab.supportedFormatsLocalFaq')
+                      : t('knowledge.documentsTab.supportedFormats')}
                   </p>
                 </div>
               </div>

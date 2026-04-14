@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +18,7 @@ interface KBRetrieveGenericProps {
 }
 
 /**
- * Generic knowledge base retrieve component
- * Supports both builtin and external knowledge bases
+ * 通用知识库检索组件，同时兼容内置和插件型知识库。
  */
 export default function KBRetrieveGeneric({
   kbId,
@@ -50,7 +50,7 @@ export default function KBRetrieveGeneric({
     if (getResultTitle) {
       return getResultTitle(result);
     }
-    // Default: use document_name from metadata, fallback to file_id or id
+    // 默认优先展示文档名，其次回退到 file_id 或结果 id
     return (
       (result.metadata.document_name as string) ||
       (result.metadata.file_id as string) ||
@@ -59,11 +59,10 @@ export default function KBRetrieveGeneric({
   };
 
   /**
-   * Extract text content from the content array
-   * The content array may contain multiple items with type 'text'
+   * 从 content 数组中提取文本内容。
    */
   const extractTextFromContent = (result: RetrieveResult): string => {
-    // First try to get content from the new format
+    // 优先读取结构化 content 中的文本片段
     if (result.content && Array.isArray(result.content)) {
       const textParts = result.content
         .filter((item) => item.type === 'text' && item.text)
@@ -75,6 +74,41 @@ export default function KBRetrieveGeneric({
     }
 
     return '';
+  };
+
+  const renderResultBody = (result: RetrieveResult) => {
+    const standardAnswer = result.metadata.local_faq_answer as string | undefined;
+    const finalAnswer =
+      (result.metadata.final_answer as string | undefined) ||
+      extractTextFromContent(result);
+
+    if (standardAnswer) {
+      const showFinalAnswer = finalAnswer && finalAnswer !== standardAnswer;
+
+      return (
+        <div className="space-y-3 text-sm">
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-muted-foreground">
+              {t('knowledge.entries.standardAnswer')}
+            </div>
+            <p className="whitespace-pre-wrap">{standardAnswer}</p>
+          </div>
+
+          {showFinalAnswer && (
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t('knowledge.entries.finalAnswer')}
+              </div>
+              <p className="whitespace-pre-wrap">{finalAnswer}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <p className="text-sm whitespace-pre-wrap">{extractTextFromContent(result)}</p>
+    );
   };
 
   return (
@@ -102,19 +136,23 @@ export default function KBRetrieveGeneric({
           results.map((result) => (
             <Card key={result.id} className="w-full">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex justify-between items-center">
-                  <span>{getTitle(result)}</span>
-                  <span className="text-xs text-muted-foreground">
+                <CardTitle className="text-sm font-medium flex justify-between items-center gap-3">
+                  <div className="flex flex-col gap-2">
+                    <span>{getTitle(result)}</span>
+                    {result.metadata.matched_question && (
+                      <Badge variant="secondary" className="w-fit">
+                        {t('knowledge.entries.matchedQuestion')}:
+                        {' ' + String(result.metadata.matched_question)}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {t('knowledge.distance')}:{' '}
                     {(result.distance ?? 0).toFixed(4)}
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap">
-                  {extractTextFromContent(result)}
-                </p>
-              </CardContent>
+              <CardContent>{renderResultBody(result)}</CardContent>
             </Card>
           ))
         )}

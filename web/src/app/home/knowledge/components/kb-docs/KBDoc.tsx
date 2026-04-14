@@ -10,10 +10,12 @@ import { useTranslation } from 'react-i18next';
 
 export default function KBDoc({
   kbId,
+  knowledgeEnginePluginId,
   ragEngineName,
   ragEngineCapabilities,
 }: {
   kbId: string;
+  knowledgeEnginePluginId?: string | null;
   ragEngineName?: I18nObject;
   ragEngineCapabilities?: string[];
 }) {
@@ -98,6 +100,7 @@ export default function KBDoc({
     <div className="container mx-auto py-2">
       <FileUploadZone
         kbId={kbId}
+        knowledgeEnginePluginId={knowledgeEnginePluginId}
         ragEngineName={ragEngineName}
         ragEngineCapabilities={ragEngineCapabilities}
         onUploadSuccess={handleUploadSuccess}

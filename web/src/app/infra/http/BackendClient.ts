@@ -27,7 +27,10 @@ import {
   ApiRespKnowledgeBase,
   KnowledgeBase,
   ApiRespKnowledgeBaseFiles,
+  ApiRespKnowledgeBaseEntries,
+  ApiRespKnowledgeBaseEntry,
   ApiRespKnowledgeBaseRetrieve,
+  KnowledgeBaseEntry,
   ApiRespProviderEmbeddingModels,
   ApiRespProviderEmbeddingModel,
   EmbeddingModel,
@@ -550,6 +553,34 @@ export class BackendClient extends BaseHttpClient {
     uuid: string,
   ): Promise<ApiRespKnowledgeBaseFiles> {
     return this.get(`/api/v1/knowledge/bases/${uuid}/files`);
+  }
+
+  public getKnowledgeBaseEntries(
+    uuid: string,
+  ): Promise<ApiRespKnowledgeBaseEntries> {
+    return this.get(`/api/v1/knowledge/bases/${uuid}/entries`);
+  }
+
+  public createKnowledgeBaseEntry(
+    uuid: string,
+    entry: Partial<KnowledgeBaseEntry>,
+  ): Promise<ApiRespKnowledgeBaseEntry> {
+    return this.post(`/api/v1/knowledge/bases/${uuid}/entries`, entry);
+  }
+
+  public updateKnowledgeBaseEntry(
+    uuid: string,
+    entryId: string,
+    entry: Partial<KnowledgeBaseEntry>,
+  ): Promise<ApiRespKnowledgeBaseEntry> {
+    return this.put(`/api/v1/knowledge/bases/${uuid}/entries/${entryId}`, entry);
+  }
+
+  public deleteKnowledgeBaseEntry(
+    uuid: string,
+    entryId: string,
+  ): Promise<object> {
+    return this.delete(`/api/v1/knowledge/bases/${uuid}/entries/${entryId}`);
   }
 
   public deleteKnowledgeBaseFile(
