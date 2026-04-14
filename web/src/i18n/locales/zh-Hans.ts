@@ -840,18 +840,18 @@ const zhHans = {
     deletePipelineHint: '删除后，绑定此流水线的机器人将无法正常工作。',
     copyPipelineAction: '复制此流水线',
     copyPipelineHint: '创建一条新的流水线，并复制所有配置。',
-    localAgentRoleHintTitle: '传奇客服演示配置',
+    localAgentRoleHintTitle: '传奇客服配置',
     localAgentRoleHintDescription:
-      '主界面按业务字段维护应用设定、开场介绍和知识库，原始提示词默认收进高级配置，演示时不直接暴露。',
+      '主界面按业务字段维护应用设定、开场介绍和知识库，原始提示词默认收进高级配置。',
     localAgentBusinessPanelTitle: '应用配置',
     localAgentBusinessPanelDescription:
       '用业务口径维护客服身份和话术，不需要直接编辑底层 prompt。',
     localAgentApplicationSettings: '应用设定',
     localAgentApplicationSettingsDescription:
       '填写客服身份、回复原则、版本推荐规则和转人工条件。',
-    localAgentApplicationDescription: '应用描述',
+    localAgentApplicationDescription: 'agent描述',
     localAgentApplicationDescriptionDescription:
-      '对外说明这个 AI 客服的定位，适合在演示时快速介绍。',
+      '对外说明这个 agent 的定位，方便快速了解其用途。',
     localAgentOpeningIntro: '开场介绍',
     localAgentOpeningIntroDescription: '首轮主动问候的参考话术。',
     localAgentKnowledgeTitle: '客服知识库',

@@ -83,8 +83,8 @@ stages:
           en_US: Application Settings
           zh_Hans: 应用设定
         description:
-          en_US: Describe the customer service identity, reply rules, version recommendation strategy and transfer conditions for demo use.
-          zh_Hans: 用业务配置的方式描述客服身份、回复规则、版本推荐策略和转人工条件，适合演示直接编辑。
+          en_US: Describe the customer service identity, reply rules, version recommendation strategy and transfer conditions.
+          zh_Hans: 用业务配置的方式描述客服身份、回复规则、版本推荐策略和转人工条件。
         type: text
         required: false
         default: "你是【传奇手游】企微专属智能客服，聚焦老玩家召回+新游推介核心场景。严格参照知识库内容，同一问题随机选取 1 个答案回复，版本匹配精准，不混淆下载链接。主动问候时优先关联玩家过往游戏经历，自然推介匹配版本和下载指引。保持回复简洁亲切，不要太长，暂时不要推送复古版本内容。触发职业排行、氪度对比、礼包码、新区时间、下载失败、注册异常、负面质疑、要求人工、提交区服角色名、旧账号复杂问题等场景时，只回复“稍等下哈”。执行敏感词双重过滤，并把“福利”统一替换成“福～利”。"
@@ -94,11 +94,11 @@ stages:
           value: true
       - name: application-description
         label:
-          en_US: Application Description
-          zh_Hans: 应用描述
+          en_US: Agent Description
+          zh_Hans: agent描述
         description:
-          en_US: A short business-facing summary shown in the demo-oriented config page.
-          zh_Hans: 面向业务侧展示的简短应用定位，用于演示时快速说明客服用途。
+          en_US: Describe what this agent handles so people can quickly understand its purpose.
+          zh_Hans: 对外说明这个 agent 的定位，方便快速了解其用途。
         type: string
         required: false
         default: "企微传奇老玩家召回与新游推荐客服"
@@ -112,7 +112,7 @@ stages:
           zh_Hans: 开场介绍
         description:
           en_US: A reference greeting for the first proactive message. This is displayed as business copy instead of raw prompt content.
-          zh_Hans: 首轮主动问候的参考话术，前端按业务文案展示，不直接暴露底层 prompt。
+          zh_Hans: 首轮主动问候的参考话术，前端按业务文案展示。
         type: text
         required: false
         default: "老板你好呀！专属新游福～利来啦🎁 这款适配老玩家的新传奇，不仅贴合你之前的游戏喜好，还能领取传奇老玩家专属登录礼，解锁专属装备。现邀请老玩家回归体验。要不要一起冲新服？"
@@ -126,7 +126,7 @@ stages:
           zh_Hans: 显示高级配置
         description:
           en_US: Turn this on only when you need to directly edit the raw system prompt.
-          zh_Hans: 仅在需要直接编辑原始 system prompt 时开启，演示时建议保持关闭。
+          zh_Hans: 仅在需要直接编辑原始 system prompt 时开启。
         type: boolean
         required: false
         default: false
@@ -139,8 +139,8 @@ stages:
           en_US: Advanced Prompt
           zh_Hans: 高级提示词
         description:
-          en_US: Raw system prompt for advanced debugging or fine-tuning. Business-facing demos should edit the fields above first.
-          zh_Hans: 原始 system prompt，仅用于高级调试或精细微调；业务演示优先修改上方业务字段。
+          en_US: Raw system prompt for advanced debugging or fine-tuning. Edit the fields above first in most cases.
+          zh_Hans: 原始 system prompt，仅用于高级调试或精细微调；大多数情况下优先修改上方业务字段。
         type: prompt-editor
         required: true
         default:
@@ -155,7 +155,7 @@ stages:
           en_US: Customer Service Knowledge Bases
           zh_Hans: 客服知识库
         description:
-          en_US: Bind the knowledge bases used together with the role script. Local FAQ bases are recommended for demo use.
+          en_US: Bind the knowledge bases used together with the role script. Local FAQ bases are recommended.
           zh_Hans: 绑定和客服角色设定一起生效的知识库，推荐选择本地 FAQ 问答库；若不选择，则直接使用大模型回复
         type: knowledge-base-multi-selector
         required: false

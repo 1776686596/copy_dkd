@@ -883,18 +883,18 @@ const enUS = {
     copyPipelineAction: 'Copy this pipeline',
     copyPipelineHint:
       'Create a new pipeline with all configurations duplicated.',
-    localAgentRoleHintTitle: 'Legend customer service demo setup',
+    localAgentRoleHintTitle: 'Legend customer service setup',
     localAgentRoleHintDescription:
-      'Manage business-facing app settings, opening intro and knowledge bases here. The raw prompt stays hidden in Advanced by default.',
+      'Manage application settings, opening intro and knowledge bases here. The raw prompt stays in Advanced by default.',
     localAgentBusinessPanelTitle: 'Application setup',
     localAgentBusinessPanelDescription:
       'Maintain the customer service identity and business script without directly editing the underlying prompt.',
     localAgentApplicationSettings: 'Application settings',
     localAgentApplicationSettingsDescription:
       'Describe the role, reply rules, version recommendation strategy and transfer conditions.',
-    localAgentApplicationDescription: 'Application description',
+    localAgentApplicationDescription: 'Agent description',
     localAgentApplicationDescriptionDescription:
-      'A short business-facing summary for the AI customer service demo.',
+      'Describe what this agent handles so people can quickly understand its purpose.',
     localAgentOpeningIntro: 'Opening intro',
     localAgentOpeningIntroDescription:
       'Reference copy for the first proactive greeting.',
