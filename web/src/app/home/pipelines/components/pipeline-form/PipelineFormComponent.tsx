@@ -409,6 +409,16 @@ export default function PipelineFormComponent({
           )}
         </CardHeader>
         <CardContent className="space-y-6">
+          {formName === 'ai' && stage.name === 'local-agent' && (
+            <div className="rounded-lg border bg-muted/40 px-4 py-3">
+              <p className="text-sm font-medium">
+                {t('pipelines.localAgentRoleHintTitle')}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t('pipelines.localAgentRoleHintDescription')}
+              </p>
+            </div>
+          )}
           <DynamicFormComponent
             itemConfigList={stage.config}
             initialValues={

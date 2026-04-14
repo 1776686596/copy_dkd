@@ -883,6 +883,9 @@ const enUS = {
     copyPipelineAction: 'Copy this pipeline',
     copyPipelineHint:
       'Create a new pipeline with all configurations duplicated.',
+    localAgentRoleHintTitle: 'Game customer service role and knowledge setup',
+    localAgentRoleHintDescription:
+      'Edit the game customer service role script below and bind Local FAQ knowledge bases in the same place. Replies will use both the role script and the bound knowledge bases.',
     extensions: {
       title: 'Extensions',
       loadError: 'Failed to load plugins',

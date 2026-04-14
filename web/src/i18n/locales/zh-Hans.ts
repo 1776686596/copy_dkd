@@ -840,6 +840,9 @@ const zhHans = {
     deletePipelineHint: '删除后，绑定此流水线的机器人将无法正常工作。',
     copyPipelineAction: '复制此流水线',
     copyPipelineHint: '创建一条新的流水线，并复制所有配置。',
+    localAgentRoleHintTitle: '传奇客服角色与知识库联动配置',
+    localAgentRoleHintDescription:
+      '下方可以直接维护传奇客服角色设定，并绑定本地 FAQ 知识库。模型回复时会同时参考角色话术和知识库内容。',
     extensions: {
       title: '扩展集成',
       loadError: '加载插件列表失败',
