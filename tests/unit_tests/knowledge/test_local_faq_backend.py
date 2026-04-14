@@ -3,7 +3,10 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 from zipfile import ZipFile
+
+import pytest
 
 
 def _write_csv_faq(path: Path) -> None:
@@ -144,3 +147,120 @@ def test_build_retrieve_result_returns_expected_fields():
     assert result['metadata']['source_file_id'] == 'file-1'
     assert result['metadata']['local_faq_answer'] == '鬼王前期开荒更快，焚天更适合中后期团战。'
     assert result['content'][0]['text'] == '鬼王前期开荒更快，焚天更适合中后期团战。'
+
+
+def test_required_database_version_is_27():
+    from langbot.pkg.utils import constants
+
+    assert constants.required_database_version == 27
+
+
+@pytest.mark.asyncio
+async def test_list_knowledge_engines_includes_builtin_local_faq():
+    from langbot.pkg.api.http.service.knowledge import KnowledgeService
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.plugin_connector = Mock(is_enable_plugin=False)
+
+    service = KnowledgeService(mock_app)
+    engines = await service.list_knowledge_engines()
+
+    assert any(engine['plugin_id'] == 'builtin/local-faq' for engine in engines)
+    local_faq_engine = next(
+        engine for engine in engines if engine['plugin_id'] == 'builtin/local-faq'
+    )
+    assert 'doc_ingestion' in local_faq_engine['capabilities']
+    assert 'doc_parsing' in local_faq_engine['capabilities']
+
+
+@pytest.mark.asyncio
+async def test_builtin_local_faq_runtime_retrieve_returns_matching_entry():
+    from langbot.pkg.entity.persistence import rag as persistence_rag
+    from langbot.pkg.rag.knowledge.kbmgr import RAGManager
+
+    mock_result = Mock()
+    mock_result.all.return_value = [
+        persistence_rag.LocalFAQEntry(
+            uuid='entry-1',
+            kb_id='kb-1',
+            questions=['哪个职业好玩？', '职业推荐'],
+            answer='鬼王前期开荒更快，焚天更适合中后期团战。',
+            source_file_id='file-1',
+            enabled=True,
+            sort_order=0,
+        )
+    ]
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.persistence_mgr = Mock()
+    mock_app.persistence_mgr.execute_async = AsyncMock(return_value=mock_result)
+
+    kb_entity = persistence_rag.KnowledgeBase(
+        uuid='kb-1',
+        name='本地问答库',
+        description='',
+        knowledge_engine_plugin_id='builtin/local-faq',
+        creation_settings={},
+        retrieval_settings={},
+    )
+
+    manager = RAGManager(mock_app)
+    runtime_kb = await manager.load_knowledge_base(kb_entity)
+    results = await runtime_kb.retrieve('哪个职业好玩', settings={'min_similarity': 0.95})
+
+    assert len(results) == 1
+    assert results[0].metadata['matched_question'] == '哪个职业好玩？'
+    assert results[0].metadata['source_file_id'] == 'file-1'
+    assert results[0].content[0].text == '鬼王前期开荒更快，焚天更适合中后期团战。'
+
+
+@pytest.mark.asyncio
+async def test_get_local_faq_entries_serializes_rows():
+    from langbot.pkg.api.http.service.knowledge import KnowledgeService
+    from langbot.pkg.entity.persistence import rag as persistence_rag
+
+    row = persistence_rag.LocalFAQEntry(
+        uuid='entry-1',
+        kb_id='kb-1',
+        questions=['职业推荐'],
+        answer='鬼王前期开荒更快',
+        source_file_id='file-1',
+        enabled=True,
+        sort_order=1,
+    )
+
+    mock_result = Mock()
+    mock_result.all.return_value = [row]
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.persistence_mgr = Mock()
+    mock_app.persistence_mgr.execute_async = AsyncMock(return_value=mock_result)
+    mock_app.persistence_mgr.serialize_model = Mock(
+        return_value={
+            'uuid': 'entry-1',
+            'kb_id': 'kb-1',
+            'questions': ['职业推荐'],
+            'answer': '鬼王前期开荒更快',
+            'source_file_id': 'file-1',
+            'enabled': True,
+            'sort_order': 1,
+        }
+    )
+    mock_app.rag_mgr = Mock()
+    mock_app.rag_mgr.get_knowledge_base_details = AsyncMock(
+        return_value={
+            'uuid': 'kb-1',
+            'knowledge_engine_plugin_id': 'builtin/local-faq',
+            'knowledge_engine': {'capabilities': ['doc_ingestion', 'doc_parsing']},
+        }
+    )
+
+    service = KnowledgeService(mock_app)
+    entries = await service.get_local_faq_entries('kb-1')
+
+    assert len(entries) == 1
+    assert entries[0]['questions'] == ['职业推荐']
+    assert entries[0]['answer'] == '鬼王前期开荒更快'

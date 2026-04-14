@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import sqlalchemy
+import uuid
 
 from ....core import app
 from ....entity.persistence import rag as persistence_rag
+from ....rag.knowledge.builtin_local_faq import (
+    BUILTIN_LOCAL_FAQ_PLUGIN_ID,
+    get_builtin_local_faq_engine,
+)
 
 
 class KnowledgeService:
@@ -141,6 +146,9 @@ class KnowledgeService:
         await self.ap.persistence_mgr.execute_async(
             sqlalchemy.delete(persistence_rag.KnowledgeBase).where(persistence_rag.KnowledgeBase.uuid == kb_uuid)
         )
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.delete(persistence_rag.LocalFAQEntry).where(persistence_rag.LocalFAQEntry.kb_id == kb_uuid)
+        )
 
         # delete files
         # NOTE: Chunk cleanup is for legacy (pre-plugin) KBs that stored chunks locally.
@@ -165,7 +173,7 @@ class KnowledgeService:
 
     async def list_knowledge_engines(self) -> list[dict]:
         """List all available Knowledge Engines from plugins."""
-        engines = []
+        engines = [get_builtin_local_faq_engine()]
 
         if not self.ap.plugin_connector.is_enable_plugin:
             return engines
@@ -194,6 +202,8 @@ class KnowledgeService:
 
     async def get_engine_creation_schema(self, plugin_id: str) -> dict:
         """Get creation settings schema for a specific Knowledge Engine."""
+        if plugin_id == BUILTIN_LOCAL_FAQ_PLUGIN_ID:
+            return get_builtin_local_faq_engine().get('creation_schema', [])
         try:
             return await self.ap.plugin_connector.get_rag_creation_schema(plugin_id)
         except Exception as e:
@@ -202,8 +212,122 @@ class KnowledgeService:
 
     async def get_engine_retrieval_schema(self, plugin_id: str) -> dict:
         """Get retrieval settings schema for a specific Knowledge Engine."""
+        if plugin_id == BUILTIN_LOCAL_FAQ_PLUGIN_ID:
+            return get_builtin_local_faq_engine().get('retrieval_schema', [])
         try:
             return await self.ap.plugin_connector.get_rag_retrieval_schema(plugin_id)
         except Exception as e:
             self.ap.logger.warning(f'Failed to get retrieval schema for {plugin_id}: {e}')
             return {}
+
+    async def _ensure_local_faq_kb(self, kb_uuid: str) -> dict:
+        kb_info = await self.ap.rag_mgr.get_knowledge_base_details(kb_uuid)
+        if not kb_info:
+            raise Exception('Knowledge base not found')
+        if kb_info.get('knowledge_engine_plugin_id') != BUILTIN_LOCAL_FAQ_PLUGIN_ID:
+            raise Exception('This knowledge base is not a local FAQ knowledge base')
+        return kb_info
+
+    async def get_local_faq_entries(self, kb_uuid: str) -> list[dict]:
+        await self._ensure_local_faq_kb(kb_uuid)
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(persistence_rag.LocalFAQEntry)
+            .where(persistence_rag.LocalFAQEntry.kb_id == kb_uuid)
+            .order_by(
+                persistence_rag.LocalFAQEntry.sort_order.asc(),
+                persistence_rag.LocalFAQEntry.created_at.asc(),
+            )
+        )
+        rows = result.all()
+        return [self.ap.persistence_mgr.serialize_model(persistence_rag.LocalFAQEntry, row) for row in rows]
+
+    async def create_local_faq_entry(self, kb_uuid: str, payload: dict) -> dict:
+        await self._ensure_local_faq_kb(kb_uuid)
+        questions = self._normalize_questions(payload.get('questions'))
+        answer = str(payload.get('answer', '')).strip()
+        if not questions or not answer:
+            raise ValueError('questions and answer are required')
+
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(persistence_rag.LocalFAQEntry).where(persistence_rag.LocalFAQEntry.kb_id == kb_uuid)
+        )
+        next_sort_order = max((entry.sort_order for entry in result.all()), default=-1) + 1
+
+        entry_data = {
+            'uuid': str(uuid.uuid4()),
+            'kb_id': kb_uuid,
+            'questions': questions,
+            'answer': answer,
+            'source_file_id': payload.get('source_file_id'),
+            'enabled': bool(payload.get('enabled', True)),
+            'sort_order': int(payload.get('sort_order', next_sort_order)),
+        }
+        await self.ap.persistence_mgr.execute_async(sqlalchemy.insert(persistence_rag.LocalFAQEntry).values(entry_data))
+        await self._touch_knowledge_base(kb_uuid)
+        return entry_data
+
+    async def update_local_faq_entry(self, kb_uuid: str, entry_uuid: str, payload: dict) -> dict:
+        await self._ensure_local_faq_kb(kb_uuid)
+        update_data: dict = {}
+
+        if 'questions' in payload:
+            questions = self._normalize_questions(payload.get('questions'))
+            if not questions:
+                raise ValueError('questions cannot be empty')
+            update_data['questions'] = questions
+        if 'answer' in payload:
+            answer = str(payload.get('answer', '')).strip()
+            if not answer:
+                raise ValueError('answer cannot be empty')
+            update_data['answer'] = answer
+        if 'enabled' in payload:
+            update_data['enabled'] = bool(payload.get('enabled'))
+        if 'sort_order' in payload:
+            update_data['sort_order'] = int(payload.get('sort_order'))
+
+        if not update_data:
+            return {'uuid': entry_uuid}
+
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.update(persistence_rag.LocalFAQEntry)
+            .where(persistence_rag.LocalFAQEntry.uuid == entry_uuid)
+            .where(persistence_rag.LocalFAQEntry.kb_id == kb_uuid)
+            .values(update_data)
+        )
+        await self._touch_knowledge_base(kb_uuid)
+        return {'uuid': entry_uuid}
+
+    async def delete_local_faq_entry(self, kb_uuid: str, entry_uuid: str) -> None:
+        await self._ensure_local_faq_kb(kb_uuid)
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.delete(persistence_rag.LocalFAQEntry)
+            .where(persistence_rag.LocalFAQEntry.uuid == entry_uuid)
+            .where(persistence_rag.LocalFAQEntry.kb_id == kb_uuid)
+        )
+        await self._touch_knowledge_base(kb_uuid)
+
+    async def _touch_knowledge_base(self, kb_uuid: str) -> None:
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.update(persistence_rag.KnowledgeBase)
+            .values(updated_at=sqlalchemy.func.now())
+            .where(persistence_rag.KnowledgeBase.uuid == kb_uuid)
+        )
+
+    @staticmethod
+    def _normalize_questions(raw_questions: object) -> list[str]:
+        if raw_questions is None:
+            return []
+
+        if isinstance(raw_questions, list):
+            parts = raw_questions
+        else:
+            parts = [raw_questions]
+
+        questions: list[str] = []
+        for part in parts:
+            for segment in str(part).replace('；', ';').replace('\n', ';').split(';'):
+                normalized = segment.strip()
+                if normalized:
+                    questions.append(normalized)
+
+        return questions

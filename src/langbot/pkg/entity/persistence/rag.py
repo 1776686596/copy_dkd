@@ -37,6 +37,19 @@ class File(Base):
     status = sqlalchemy.Column(sqlalchemy.String, default='pending')  # pending, processing, completed, failed
 
 
+class LocalFAQEntry(Base):
+    __tablename__ = 'knowledge_base_local_faq_entries'
+    uuid = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True, unique=True)
+    kb_id = sqlalchemy.Column(sqlalchemy.String(255), nullable=False, index=True)
+    questions = sqlalchemy.Column(sqlalchemy.JSON, nullable=False)
+    answer = sqlalchemy.Column(sqlalchemy.Text, nullable=False)
+    source_file_id = sqlalchemy.Column(sqlalchemy.String(255), nullable=True, index=True)
+    enabled = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=True)
+    sort_order = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, default=0)
+    created_at = sqlalchemy.Column(sqlalchemy.DateTime, default=sqlalchemy.func.now())
+    updated_at = sqlalchemy.Column(sqlalchemy.DateTime, default=sqlalchemy.func.now(), onupdate=sqlalchemy.func.now())
+
+
 class Chunk(Base):
     __tablename__ = 'knowledge_base_chunks'
     uuid = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True, unique=True)

@@ -14,6 +14,7 @@ from langbot.pkg.entity.persistence import rag as persistence_rag
 from langbot.pkg.core import taskmgr
 from langbot_plugin.api.entities.builtin.rag import context as rag_context
 from .base import KnowledgeBaseInterface
+from .builtin_local_faq import BUILTIN_LOCAL_FAQ_PLUGIN_ID, LocalFAQKnowledgeBase, get_builtin_local_faq_engine
 
 
 class RuntimeKnowledgeBase(KnowledgeBaseInterface):
@@ -377,11 +378,13 @@ class RAGManager:
         knowledge_bases = result.all()
 
         # 2. Get all available Knowledge Engines for enrichment
-        engine_map = {}
+        builtin_engine = get_builtin_local_faq_engine()
+        engine_map = {builtin_engine['plugin_id']: builtin_engine}
         if self.ap.plugin_connector.is_enable_plugin:
             try:
                 engines = await self.ap.plugin_connector.list_knowledge_engines()
                 engine_map = {e['plugin_id']: e for e in engines}
+                engine_map[builtin_engine['plugin_id']] = builtin_engine
             except Exception as e:
                 self.ap.logger.warning(f'Failed to list Knowledge Engines: {e}')
 
@@ -406,11 +409,12 @@ class RAGManager:
         kb_dict = self.ap.persistence_mgr.serialize_model(persistence_rag.KnowledgeBase, kb)
 
         # Fetch engines
-        engine_map = {}
+        builtin_engine = get_builtin_local_faq_engine()
+        engine_map = {builtin_engine['plugin_id']: builtin_engine}
         if self.ap.plugin_connector.is_enable_plugin:
             try:
                 engines = await self.ap.plugin_connector.list_knowledge_engines()
-                engine_map = {e['plugin_id']: e for e in engines}
+                engine_map.update({e['plugin_id']: e for e in engines})
             except Exception as e:
                 self.ap.logger.warning(f'Failed to list Knowledge Engines: {e}')
 
@@ -465,16 +469,17 @@ class RAGManager:
     ) -> persistence_rag.KnowledgeBase:
         """Create a new knowledge base using a RAG plugin."""
         # Validate that the Knowledge Engine plugin exists
+        engine_ids = {BUILTIN_LOCAL_FAQ_PLUGIN_ID}
         if self.ap.plugin_connector.is_enable_plugin:
             try:
                 engines = await self.ap.plugin_connector.list_knowledge_engines()
-                engine_ids = [e.get('plugin_id') for e in engines]
-                if knowledge_engine_plugin_id not in engine_ids:
-                    raise ValueError(f'Knowledge Engine plugin {knowledge_engine_plugin_id} not found')
+                engine_ids.update(e.get('plugin_id') for e in engines)
             except ValueError:
                 raise
             except Exception as e:
                 self.ap.logger.warning(f'Failed to validate Knowledge Engine plugin existence: {e}')
+        if knowledge_engine_plugin_id not in engine_ids:
+            raise ValueError(f'Knowledge Engine plugin {knowledge_engine_plugin_id} not found')
 
         kb_uuid = str(uuid.uuid4())
         # Use UUID as collection ID by default for isolation
@@ -532,7 +537,7 @@ class RAGManager:
     async def load_knowledge_base(
         self,
         knowledge_base_entity: persistence_rag.KnowledgeBase | sqlalchemy.Row | dict,
-    ) -> RuntimeKnowledgeBase:
+    ) -> KnowledgeBaseInterface:
         if isinstance(knowledge_base_entity, sqlalchemy.Row):
             # Safe access to _mapping for SQLAlchemy 1.4+
             knowledge_base_entity = persistence_rag.KnowledgeBase(**knowledge_base_entity._mapping)
@@ -543,7 +548,10 @@ class RAGManager:
             }
             knowledge_base_entity = persistence_rag.KnowledgeBase(**filtered_dict)
 
-        runtime_knowledge_base = RuntimeKnowledgeBase(ap=self.ap, knowledge_base_entity=knowledge_base_entity)
+        if knowledge_base_entity.knowledge_engine_plugin_id == BUILTIN_LOCAL_FAQ_PLUGIN_ID:
+            runtime_knowledge_base = LocalFAQKnowledgeBase(ap=self.ap, knowledge_base_entity=knowledge_base_entity)
+        else:
+            runtime_knowledge_base = RuntimeKnowledgeBase(ap=self.ap, knowledge_base_entity=knowledge_base_entity)
 
         await runtime_knowledge_base.initialize()
 
