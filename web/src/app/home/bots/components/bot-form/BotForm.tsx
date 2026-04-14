@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import i18n from 'i18next';
 import {
   IChooseAdapterEntity,
@@ -56,6 +62,7 @@ import {
   groupByCategory,
   getCategoryLabel,
 } from '@/app/infra/entities/adapter-categories';
+import { resolveWecomWebLoginUiState } from './wecomWebLoginState';
 
 const getFormSchema = (t: (key: string) => string) =>
   z.object({
@@ -144,6 +151,7 @@ export default function BotForm({
   const [webhookUrl, setWebhookUrl] = useState<string>('');
   const [extraWebhookUrl, setExtraWebhookUrl] = useState<string>('');
   const [loginRequired, setLoginRequired] = useState<boolean>(false);
+  const [loginStateLoaded, setLoginStateLoaded] = useState<boolean>(false);
   const [loginQrImageBase64, setLoginQrImageBase64] = useState<string | null>(
     null,
   );
@@ -173,10 +181,47 @@ export default function BotForm({
     setBotFormValuesRef.current();
   }, []);
 
+  const clearWecomWebLoginPolling = useCallback(() => {
+    if (loginPollingRef.current !== null) {
+      window.clearInterval(loginPollingRef.current);
+      loginPollingRef.current = null;
+    }
+  }, []);
+
+  const refreshWecomWebLoginState = useCallback(
+    async (botId: string, requestToken: number) => {
+      try {
+        const res = await httpClient.getBot(botId);
+        if (loginRequestTokenRef.current !== requestToken) {
+          return;
+        }
+        const runtimeValues = res.bot.adapter_runtime_values;
+        const nextLoginRequired = runtimeValues?.login_required === true;
+
+        setLoginStateLoaded(true);
+        setLoginRequired(nextLoginRequired);
+        setLoginQrLoadError(null);
+        setLoginQrImageBase64(
+          nextLoginRequired
+            ? (runtimeValues?.login_qr_image_base64 ?? null)
+            : null,
+        );
+      } catch {
+        if (loginRequestTokenRef.current !== requestToken) {
+          return;
+        }
+        setLoginStateLoaded(true);
+        setLoginQrLoadError('登录状态拉取失败，请稍后刷新页面重试');
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!initBotId || currentAdapter !== 'wecomweb') {
       loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
+      setLoginStateLoaded(false);
       setLoginRequired(false);
       setLoginQrImageBase64(null);
       setLoginQrLoadError(null);
@@ -187,57 +232,32 @@ export default function BotForm({
     const requestToken = loginRequestTokenRef.current + 1;
     loginRequestTokenRef.current = requestToken;
     clearWecomWebLoginPolling();
-    refreshWecomWebLoginState(botId, requestToken);
+    setLoginStateLoaded(false);
+    void refreshWecomWebLoginState(botId, requestToken);
+    loginPollingRef.current = window.setInterval(() => {
+      void refreshWecomWebLoginState(botId, requestToken);
+    }, 3000);
 
     return () => {
       loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
     };
-  }, [currentAdapter, initBotId]);
+  }, [
+    clearWecomWebLoginPolling,
+    currentAdapter,
+    initBotId,
+    refreshWecomWebLoginState,
+  ]);
 
-  function startWecomWebLoginPolling(botId: string, requestToken: number) {
-    if (loginPollingRef.current !== null) {
-      return;
-    }
-    loginPollingRef.current = window.setInterval(() => {
-      refreshWecomWebLoginState(botId, requestToken);
-    }, 3000);
-  }
-
-  function clearWecomWebLoginPolling() {
-    if (loginPollingRef.current !== null) {
-      window.clearInterval(loginPollingRef.current);
-      loginPollingRef.current = null;
-    }
-  }
-
-  async function refreshWecomWebLoginState(botId: string, requestToken: number) {
-    try {
-      const res = await httpClient.getBot(botId);
-      if (loginRequestTokenRef.current !== requestToken) {
-        return;
-      }
-      const runtimeValues = res.bot.adapter_runtime_values;
-      const nextLoginRequired = runtimeValues?.login_required === true;
-
-      setLoginRequired(nextLoginRequired);
-      setLoginQrLoadError(null);
-      setLoginQrImageBase64(
-        nextLoginRequired ? runtimeValues?.login_qr_image_base64 ?? null : null,
-      );
-      if (nextLoginRequired) {
-        startWecomWebLoginPolling(botId, requestToken);
-      } else {
-        clearWecomWebLoginPolling();
-      }
-    } catch (err) {
-      if (loginRequestTokenRef.current !== requestToken) {
-        return;
-      }
-      clearWecomWebLoginPolling();
-      setLoginQrLoadError('登录状态拉取失败，请稍后刷新页面重试');
-    }
-  }
+  const wecomWebLoginUiState =
+    initBotId && currentAdapter === 'wecomweb'
+      ? resolveWecomWebLoginUiState({
+          hasLoadedState: loginStateLoaded,
+          loginRequired,
+          loginQrImageBase64,
+          loginQrLoadError,
+        })
+      : null;
 
   function setBotFormValues() {
     isInitializing.current = true;
@@ -692,40 +712,51 @@ export default function BotForm({
               />
             )}
 
-            {initBotId && currentAdapter === 'wecomweb' && loginRequired && (
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-sm font-medium">企业微信网页登录</p>
-                    <p className="text-sm text-muted-foreground">
-                      请使用企业微信扫码完成当前 Bot 的网页登录授权。
-                    </p>
-                  </div>
-
-                  {loginQrImageBase64 ? (
-                    <div className="flex justify-center rounded-md bg-background p-4">
-                      <img
-                        src={
-                          loginQrImageBase64
-                            ? `data:image/png;base64,${loginQrImageBase64}`
-                            : undefined
-                        }
-                        alt="企业微信网页登录二维码"
-                        className="h-56 w-56 max-w-full"
-                      />
+            {initBotId &&
+              currentAdapter === 'wecomweb' &&
+              wecomWebLoginUiState && (
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-sm font-medium">企业微信网页登录</p>
+                      <p className="text-sm text-muted-foreground">
+                        保持当前页面打开即可；如登录失效，会自动显示新的二维码。
+                      </p>
                     </div>
-                  ) : loginQrLoadError ? (
-                    <p className="text-sm text-muted-foreground">
-                      {loginQrLoadError}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      正在生成登录二维码
-                    </p>
-                  )}
+
+                    {wecomWebLoginUiState.panelState === 'qrcode' &&
+                    wecomWebLoginUiState.qrImageBase64 ? (
+                      <div className="flex justify-center rounded-md bg-background p-4">
+                        <img
+                          src={
+                            wecomWebLoginUiState.qrImageBase64
+                              ? `data:image/png;base64,${wecomWebLoginUiState.qrImageBase64}`
+                              : undefined
+                          }
+                          alt="企业微信网页登录二维码"
+                          className="h-56 w-56 max-w-full"
+                        />
+                      </div>
+                    ) : wecomWebLoginUiState.panelState === 'error' ? (
+                      <p className="text-sm text-muted-foreground">
+                        {loginQrLoadError}，系统会继续自动重试。
+                      </p>
+                    ) : wecomWebLoginUiState.panelState === 'checking' ? (
+                      <p className="text-sm text-muted-foreground">
+                        正在检查当前登录状态，如需扫码会自动显示二维码。
+                      </p>
+                    ) : wecomWebLoginUiState.panelState === 'generating' ? (
+                      <p className="text-sm text-muted-foreground">
+                        正在生成登录二维码，请稍等片刻。
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        当前已登录，无需扫码；如果登录失效，这里会自动出现二维码。
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </CardContent>
         </Card>
       </form>
