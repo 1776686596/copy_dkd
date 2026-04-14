@@ -8,6 +8,7 @@ import langbot_plugin.api.entities.events as events
 import langbot_plugin.api.entities.builtin.platform.message as platform_message
 import langbot_plugin.api.entities.builtin.pipeline.query as pipeline_query
 import langbot_plugin.api.entities.builtin.platform.events as platform_events
+from .local_agent_prompt import build_local_agent_prompt_config
 
 
 @stage.stage_class('PreProcessor')
@@ -70,7 +71,7 @@ class PreProcessor(stage.PipelineStage):
         conversation = await self.ap.sess_mgr.get_conversation(
             query,
             session,
-            query.pipeline_config['ai']['local-agent']['prompt'],
+            build_local_agent_prompt_config(query.pipeline_config['ai']['local-agent']),
             query.pipeline_uuid,
             query.bot_uuid,
         )

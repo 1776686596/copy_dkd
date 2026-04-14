@@ -8,6 +8,8 @@ import {
 import DynamicFormComponent from '@/app/home/components/dynamic-form/DynamicFormComponent';
 import N8nAuthFormComponent from '@/app/home/components/dynamic-form/N8nAuthFormComponent';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -40,6 +42,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
+  Collapsible,
+  CollapsibleContent,
+} from '@/components/ui/collapsible';
+import {
   Info,
   Brain,
   Zap,
@@ -48,6 +54,8 @@ import {
   Puzzle,
   Trash2,
   Copy,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import PipelineExtension from '@/app/home/pipelines/components/pipeline-extensions/PipelineExtension';
 
@@ -314,9 +322,14 @@ export default function PipelineFormComponent({
 
     const currentValues =
       (form.getValues(formName) as Record<string, any>) || {};
+    const currentStageValues =
+      (currentValues[stageName] as Record<string, any>) || {};
     form.setValue(formName, {
       ...currentValues,
-      [stageName]: values,
+      [stageName]: {
+        ...currentStageValues,
+        ...values,
+      },
     });
 
     if (isFirstEmission) {
@@ -325,6 +338,32 @@ export default function PipelineFormComponent({
       // in the same render cycle still returns false.
       savedSnapshotRef.current = JSON.stringify(form.getValues());
     }
+  }
+
+  function handleStageFieldChange(
+    formName: keyof FormValues,
+    stageName: string,
+    fieldName: string,
+    value: unknown,
+  ) {
+    const currentValues =
+      (form.getValues(formName) as Record<string, any>) || {};
+    const currentStageValues =
+      (currentValues[stageName] as Record<string, any>) || {};
+
+    form.setValue(
+      formName,
+      {
+        ...currentValues,
+        [stageName]: {
+          ...currentStageValues,
+          [fieldName]: value,
+        },
+      },
+      {
+        shouldDirty: true,
+      },
+    );
   }
 
   function renderDynamicForms(
@@ -392,6 +431,218 @@ export default function PipelineFormComponent({
                   handleDynamicFormEmit(formName, stage.name, values);
                 }}
               />
+            </CardContent>
+          </Card>
+        );
+      }
+
+      if (stage.name === 'local-agent') {
+        const stageValues =
+          ((form.watch(formName) as Record<string, any>)?.[stage.name] as
+            | Record<string, any>
+            | undefined) || {};
+        const stageConfigItems = stage.config || [];
+        const modelConfigItems = stageConfigItems.filter((item) =>
+          ['model', 'max-round'].includes(item.name),
+        );
+        const knowledgeConfigItems = stageConfigItems.filter((item) =>
+          [
+            'knowledge-bases',
+            'local-faq-enabled',
+            'local-faq-path',
+            'local-faq-min-similarity',
+          ].includes(item.name),
+        );
+        const advancedPromptItems = stageConfigItems
+          .filter((item) => item.name === 'prompt')
+          .map((item) => ({
+            ...item,
+            show_if: undefined,
+          }));
+        const showAdvanced = Boolean(stageValues['show-advanced-prompt']);
+
+        return (
+          <Card key={stage.name}>
+            <CardHeader>
+              <CardTitle>{extractI18nObject(stage.label)}</CardTitle>
+              {stage.description && (
+                <CardDescription>
+                  {extractI18nObject(stage.description)}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-xl border bg-muted/40 px-4 py-3">
+                <p className="text-sm font-medium">
+                  {t('pipelines.localAgentRoleHintTitle')}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground leading-6">
+                  {t('pipelines.localAgentRoleHintDescription')}
+                </p>
+              </div>
+
+              <DynamicFormComponent
+                itemConfigList={modelConfigItems}
+                initialValues={stageValues}
+                onSubmit={(values) => {
+                  handleDynamicFormEmit(formName, stage.name, values);
+                }}
+              />
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold">
+                    {t('pipelines.localAgentBusinessPanelTitle')}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {t('pipelines.localAgentBusinessPanelDescription')}
+                  </p>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+                  <section className="rounded-xl border bg-card p-4 space-y-2">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {t('pipelines.localAgentApplicationSettings')}
+                      </p>
+                      <p className="text-sm text-muted-foreground leading-6">
+                        {t(
+                          'pipelines.localAgentApplicationSettingsDescription',
+                        )}
+                      </p>
+                    </div>
+                    <Textarea
+                      value={stageValues['application-settings'] || ''}
+                      onChange={(event) =>
+                        handleStageFieldChange(
+                          formName,
+                          stage.name,
+                          'application-settings',
+                          event.target.value,
+                        )
+                      }
+                      className="min-h-[280px]"
+                    />
+                  </section>
+
+                  <div className="space-y-4">
+                    <section className="rounded-xl border bg-card p-4 space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">
+                          {t('pipelines.localAgentApplicationDescription')}
+                        </p>
+                        <p className="text-sm text-muted-foreground leading-6">
+                          {t(
+                            'pipelines.localAgentApplicationDescriptionDescription',
+                          )}
+                        </p>
+                      </div>
+                      <Input
+                        value={stageValues['application-description'] || ''}
+                        onChange={(event) =>
+                          handleStageFieldChange(
+                            formName,
+                            stage.name,
+                            'application-description',
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </section>
+
+                    <section className="rounded-xl border bg-card p-4 space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">
+                          {t('pipelines.localAgentOpeningIntro')}
+                        </p>
+                        <p className="text-sm text-muted-foreground leading-6">
+                          {t('pipelines.localAgentOpeningIntroDescription')}
+                        </p>
+                      </div>
+                      <Textarea
+                        value={stageValues['opening-intro'] || ''}
+                        onChange={(event) =>
+                          handleStageFieldChange(
+                            formName,
+                            stage.name,
+                            'opening-intro',
+                            event.target.value,
+                          )
+                        }
+                        className="min-h-[180px]"
+                      />
+                    </section>
+                  </div>
+                </div>
+              </div>
+
+              <section className="rounded-xl border bg-card p-4 space-y-3">
+                <div>
+                  <h3 className="text-base font-semibold">
+                    {t('pipelines.localAgentKnowledgeTitle')}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {t('pipelines.localAgentKnowledgeDescription')}
+                  </p>
+                </div>
+                <DynamicFormComponent
+                  itemConfigList={knowledgeConfigItems}
+                  initialValues={stageValues}
+                  onSubmit={(values) => {
+                    handleDynamicFormEmit(formName, stage.name, values);
+                  }}
+                />
+              </section>
+
+              <section className="rounded-xl border border-dashed bg-card p-4">
+                <Collapsible open={showAdvanced}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-base font-semibold">
+                        {t('pipelines.localAgentAdvancedTitle')}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1 leading-6">
+                        {t('pipelines.localAgentAdvancedDescription')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-sm text-muted-foreground">
+                        {t('pipelines.localAgentAdvancedToggle')}
+                      </span>
+                      <Switch
+                        checked={showAdvanced}
+                        onCheckedChange={(checked) =>
+                          handleStageFieldChange(
+                            formName,
+                            stage.name,
+                            'show-advanced-prompt',
+                            checked,
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <CollapsibleContent className="pt-4">
+                    <div className="rounded-lg border bg-muted/20 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                        {showAdvanced ? (
+                          <ChevronDown className="size-4" />
+                        ) : (
+                          <ChevronRight className="size-4" />
+                        )}
+                        <span>{t('pipelines.localAgentAdvancedPromptOnly')}</span>
+                      </div>
+                      <DynamicFormComponent
+                        itemConfigList={advancedPromptItems}
+                        initialValues={stageValues}
+                        onSubmit={(values) => {
+                          handleDynamicFormEmit(formName, stage.name, values);
+                        }}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </section>
             </CardContent>
           </Card>
         );

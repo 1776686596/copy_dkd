@@ -840,9 +840,28 @@ const zhHans = {
     deletePipelineHint: '删除后，绑定此流水线的机器人将无法正常工作。',
     copyPipelineAction: '复制此流水线',
     copyPipelineHint: '创建一条新的流水线，并复制所有配置。',
-    localAgentRoleHintTitle: '传奇客服角色与知识库联动配置',
+    localAgentRoleHintTitle: '传奇客服演示配置',
     localAgentRoleHintDescription:
-      '下方可以直接维护传奇客服角色设定，并绑定本地 FAQ 知识库。模型回复时会同时参考角色话术和知识库内容。',
+      '主界面按业务字段维护应用设定、开场介绍和知识库，原始提示词默认收进高级配置，演示时不直接暴露。',
+    localAgentBusinessPanelTitle: '应用配置',
+    localAgentBusinessPanelDescription:
+      '用业务口径维护客服身份和话术，不需要直接编辑底层 prompt。',
+    localAgentApplicationSettings: '应用设定',
+    localAgentApplicationSettingsDescription:
+      '填写客服身份、回复原则、版本推荐规则和转人工条件。',
+    localAgentApplicationDescription: '应用描述',
+    localAgentApplicationDescriptionDescription:
+      '对外说明这个 AI 客服的定位，适合在演示时快速介绍。',
+    localAgentOpeningIntro: '开场介绍',
+    localAgentOpeningIntroDescription: '首轮主动问候的参考话术。',
+    localAgentKnowledgeTitle: '客服知识库',
+    localAgentKnowledgeDescription:
+      '绑定用于精准命中的知识库，也可以开启本地 FAQ 直答。',
+    localAgentAdvancedTitle: '高级配置',
+    localAgentAdvancedDescription:
+      '只有在需要直接调 system prompt 时再展开，默认建议保持关闭。',
+    localAgentAdvancedToggle: '显示原始提示词',
+    localAgentAdvancedPromptOnly: '这里用于维护底层 system prompt',
     extensions: {
       title: '扩展集成',
       loadError: '加载插件列表失败',

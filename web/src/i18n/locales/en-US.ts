@@ -883,9 +883,30 @@ const enUS = {
     copyPipelineAction: 'Copy this pipeline',
     copyPipelineHint:
       'Create a new pipeline with all configurations duplicated.',
-    localAgentRoleHintTitle: 'Game customer service role and knowledge setup',
+    localAgentRoleHintTitle: 'Legend customer service demo setup',
     localAgentRoleHintDescription:
-      'Edit the game customer service role script below and bind Local FAQ knowledge bases in the same place. Replies will use both the role script and the bound knowledge bases.',
+      'Manage business-facing app settings, opening intro and knowledge bases here. The raw prompt stays hidden in Advanced by default.',
+    localAgentBusinessPanelTitle: 'Application setup',
+    localAgentBusinessPanelDescription:
+      'Maintain the customer service identity and business script without directly editing the underlying prompt.',
+    localAgentApplicationSettings: 'Application settings',
+    localAgentApplicationSettingsDescription:
+      'Describe the role, reply rules, version recommendation strategy and transfer conditions.',
+    localAgentApplicationDescription: 'Application description',
+    localAgentApplicationDescriptionDescription:
+      'A short business-facing summary for the AI customer service demo.',
+    localAgentOpeningIntro: 'Opening intro',
+    localAgentOpeningIntroDescription:
+      'Reference copy for the first proactive greeting.',
+    localAgentKnowledgeTitle: 'Customer service knowledge',
+    localAgentKnowledgeDescription:
+      'Bind the knowledge base used for precise matching, or enable local FAQ direct replies.',
+    localAgentAdvancedTitle: 'Advanced settings',
+    localAgentAdvancedDescription:
+      'Open this only when you need to directly tune the system prompt.',
+    localAgentAdvancedToggle: 'Show raw prompt',
+    localAgentAdvancedPromptOnly:
+      'This area is reserved for the underlying system prompt',
     extensions: {
       title: 'Extensions',
       loadError: 'Failed to load plugins',
