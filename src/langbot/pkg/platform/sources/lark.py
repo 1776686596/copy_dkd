@@ -999,6 +999,67 @@ class LarkAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
 
         return None
 
+    def extract_service_desk_context(self, event) -> dict[str, str]:
+        source_event = getattr(event, 'event', None)
+        message = getattr(source_event, 'message', None)
+        sender = getattr(source_event, 'sender', None)
+        sender_id = getattr(sender, 'sender_id', None)
+
+        if getattr(message, 'chat_type', None) != 'p2p':
+            return {}
+
+        external_user_id = str(getattr(sender_id, 'open_id', '') or '')
+        last_message_id = str(getattr(message, 'message_id', '') or '')
+        tenant_key = str(
+            getattr(getattr(event, 'header', None), 'tenant_key', None)
+            or getattr(self, 'lark_tenant_key', '')
+            or ''
+        )
+
+        if not external_user_id or not last_message_id:
+            return {}
+
+        return {
+            'source_entry_id': tenant_key,
+            'external_user_id': external_user_id,
+            'last_message_id': last_message_id,
+        }
+
+    async def send_service_desk_text(self, context: dict[str, str], reply_text: str) -> bool:
+        request: ReplyMessageRequest = (
+            ReplyMessageRequest.builder()
+            .message_id(context['last_message_id'])
+            .request_body(
+                ReplyMessageRequestBody.builder()
+                .content(json.dumps({'text': reply_text}))
+                .msg_type('text')
+                .reply_in_thread(False)
+                .uuid(str(uuid.uuid4()))
+                .build()
+            )
+            .build()
+        )
+
+        tenant_key = context.get('source_entry_id') or getattr(self, 'lark_tenant_key', '')
+        app_access_token = self.get_app_access_token()
+        tenant_access_token = self.get_tenant_access_token(tenant_key)
+        req_opt: RequestOption = (
+            RequestOption.builder()
+            .app_ticket(self.app_ticket)
+            .tenant_key(tenant_key)
+            .app_access_token(app_access_token)
+            .tenant_access_token(tenant_access_token)
+            .build()
+        )
+        response: ReplyMessageResponse = await self.api_client.im.v1.message.areply(request, req_opt)
+
+        if not response.success():
+            raise Exception(
+                f'client.im.v1.message.reply failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}'
+            )
+
+        return True
+
     def build_api_client(self, config):
         app_id = config['app_id']
         app_secret = config['app_secret']

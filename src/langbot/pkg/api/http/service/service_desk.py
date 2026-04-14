@@ -121,6 +121,39 @@ class ServiceDeskService:
         normalized = message_text.strip().lower()
         return any(keyword.strip().lower() in normalized for keyword in keywords)
 
+    @staticmethod
+    def _build_reply_context(source) -> dict[str, str]:
+        return {
+            'source_entry_id': str(ServiceDeskService._get_value(source, 'source_entry_id', '') or ''),
+            'external_user_id': str(ServiceDeskService._get_value(source, 'external_user_id', '') or ''),
+            'last_message_id': str(ServiceDeskService._get_value(source, 'last_message_id', '') or ''),
+        }
+
+    async def _send_service_desk_text(
+        self,
+        *,
+        runtime_bot,
+        context: dict[str, str],
+        reply_text: str,
+    ) -> None:
+        adapter = runtime_bot.adapter
+        if hasattr(adapter, 'send_service_desk_text'):
+            await adapter.send_service_desk_text(context, reply_text)
+            return
+
+        bot_client = getattr(adapter, 'bot', None)
+        if bot_client is not None and hasattr(bot_client, 'send_text_msg'):
+            await bot_client.send_text_msg(
+                open_kfid=context['source_entry_id'],
+                external_userid=context['external_user_id'],
+                msgid=context['last_message_id'],
+                content=reply_text,
+            )
+            return
+
+        adapter_name = getattr(getattr(runtime_bot, 'bot_entity', None), 'adapter', 'unknown')
+        raise ValueError(f'service desk reply is not supported for adapter: {adapter_name}')
+
     async def _get_session(self, session_id: str):
         result = await self.ap.persistence_mgr.execute_async(
             sqlalchemy.select(persistence_service_desk.ServiceDeskSession).where(
@@ -296,11 +329,10 @@ class ServiceDeskService:
         if not reply_text:
             return
 
-        await runtime_bot.adapter.bot.send_text_msg(
-            open_kfid=context['source_entry_id'],
-            external_userid=context['external_user_id'],
-            msgid=context['last_message_id'],
-            content=reply_text,
+        await self._send_service_desk_text(
+            runtime_bot=runtime_bot,
+            context=context,
+            reply_text=reply_text,
         )
 
         await self.ap.monitoring_service.record_message(
@@ -312,7 +344,7 @@ class ServiceDeskService:
             session_id=self._get_session_id(event, adapter),
             status='success',
             level='info',
-            platform='wecomcs',
+            platform=getattr(runtime_bot.bot_entity, 'adapter', 'wecomcs'),
             user_id=context['external_user_id'],
             user_name=self._get_sender_name(event),
             role='assistant',
@@ -327,11 +359,10 @@ class ServiceDeskService:
         if runtime_bot is None:
             raise ValueError('runtime bot not found')
 
-        await runtime_bot.adapter.bot.send_text_msg(
-            open_kfid=desk_session.source_entry_id,
-            external_userid=desk_session.external_user_id,
-            msgid=desk_session.last_message_id,
-            content=reply_text,
+        await self._send_service_desk_text(
+            runtime_bot=runtime_bot,
+            context=self._build_reply_context(desk_session),
+            reply_text=reply_text,
         )
 
         await self.ap.monitoring_service.record_message(
@@ -341,7 +372,7 @@ class ServiceDeskService:
             pipeline_name=runtime_bot.bot_entity.use_pipeline_name,
             message_content=reply_text,
             session_id=session_id,
-            platform='wecomcs',
+            platform=getattr(runtime_bot.bot_entity, 'adapter', 'wecomcs'),
             user_id=desk_session.external_user_id,
             role='assistant',
         )

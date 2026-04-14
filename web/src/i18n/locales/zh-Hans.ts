@@ -254,14 +254,14 @@ const zhHans = {
   },
   serviceDesk: {
     title: '客服台',
-    description: '处理企微客服人工接管、规则配置和快捷素材',
-    heroTitle: '企微客服工作台',
+    description: '处理企微客服与飞书私聊的人工接管、规则配置和快捷素材',
+    heroTitle: '客服工作台',
     heroDescription:
-      '围绕人工接管、规则切换和素材回复组织为单页调度台，适合客服值守和运营配置并行处理。',
-    wecomOnlyHint: '当前仅展示适配器为 wecomcs 的客服号。',
-    noBotsTitle: '还没有可用的企微客服号',
+      '围绕人工接管、规则切换和素材回复组织为单页调度台，支持企微客服与飞书私聊演示和坐席值守。',
+    wecomOnlyHint: '当前展示适配器为 `wecomcs` 或 `lark` 的客服渠道机器人。',
+    noBotsTitle: '还没有可用的客服渠道机器人',
     noBotsDescription:
-      '请先在机器人页创建并配置 `wecomcs` 适配器，客服台才会展示会话和规则能力。',
+      '请先在机器人页创建并配置 `wecomcs` 或 `lark` 适配器，客服台才会展示会话和规则能力。',
     tabs: {
       workbench: '工作台',
       botConfig: '客服号规则',
@@ -348,7 +348,7 @@ const zhHans = {
     },
     config: {
       title: '客服号规则',
-      description: '为每个企微客服号单独设置接管关键词、兜底阈值和人工超时。',
+      description: '为每个客服渠道机器人单独设置接管关键词、兜底阈值和人工超时。',
       versionLabel: '版本标签',
       handoffKeywords: '转人工关键词',
       handoffKeywordsHint: '用逗号或换行分隔，例如：人工、投诉、退款',

@@ -265,14 +265,15 @@ const enUS = {
   serviceDesk: {
     title: 'Service Desk',
     description:
-      'Handle WeCom service sessions, routing rules, and quick-reply materials',
-    heroTitle: 'WeCom Service Desk',
+      'Handle WeCom service sessions, Lark DM sessions, routing rules, and quick-reply materials',
+    heroTitle: 'Service Desk',
     heroDescription:
-      'A single-page dispatch surface for manual takeover, rule tuning, and quick material replies.',
-    wecomOnlyHint: 'Only bots using the `wecomcs` adapter are shown here.',
-    noBotsTitle: 'No WeCom service bot is available yet',
+      'A single-page dispatch surface for manual takeover, rule tuning, and quick material replies across WeCom service and Lark DM channels.',
+    wecomOnlyHint:
+      'Bots using the `wecomcs` or `lark` adapter are shown here.',
+    noBotsTitle: 'No service desk bot is available yet',
     noBotsDescription:
-      'Create a bot with the `wecomcs` adapter first, then the service desk can load sessions and rules.',
+      'Create a bot with the `wecomcs` or `lark` adapter first, then the service desk can load sessions and rules.',
     tabs: {
       workbench: 'Workbench',
       botConfig: 'Bot Rules',
@@ -362,7 +363,7 @@ const enUS = {
     config: {
       title: 'Bot Rules',
       description:
-        'Configure handoff keywords, fallback thresholds, and manual timeout per WeCom service bot.',
+        'Configure handoff keywords, fallback thresholds, and manual timeout per service desk bot.',
       versionLabel: 'Version Label',
       handoffKeywords: 'Handoff Keywords',
       handoffKeywordsHint:

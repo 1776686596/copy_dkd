@@ -44,7 +44,7 @@ const QUEUE_FILTERS: ServiceDeskSession['queue_status'][] = [
 ];
 
 function isServiceDeskBot(bot: Bot): bot is ServiceDeskBot {
-  return Boolean(bot.uuid) && bot.adapter === 'wecomcs';
+  return Boolean(bot.uuid) && ['wecomcs', 'lark'].includes(bot.adapter);
 }
 
 export default function ServiceDeskContent() {

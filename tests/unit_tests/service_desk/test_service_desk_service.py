@@ -172,3 +172,67 @@ async def test_handle_incoming_message_accepts_any_adapter_with_service_desk_con
     assert decision.action == 'continue_ai'
     service._touch_session.assert_awaited_once()
     service.list_materials.assert_awaited_once_with('bot-1')
+
+
+@pytest.mark.asyncio
+async def test_send_structured_reply_uses_service_desk_sender_and_runtime_adapter_platform():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    ap = Mock()
+    ap.monitoring_service.record_message = AsyncMock()
+    service = ServiceDeskService(ap)
+
+    runtime_bot = SimpleNamespace(
+        adapter=SimpleNamespace(send_service_desk_text=AsyncMock()),
+        bot_entity=SimpleNamespace(
+            uuid='bot-1',
+            name='飞书客服机器人',
+            use_pipeline_uuid='pipeline-1',
+            use_pipeline_name='飞书流程',
+            adapter='lark',
+        ),
+    )
+    event = SimpleNamespace(
+        source_platform_object=SimpleNamespace(),
+        sender=SimpleNamespace(id='ou_customer_1', nickname='客户A'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'tenant-key-1',
+        'external_user_id': 'ou_customer_1',
+        'last_message_id': 'om_dc1321',
+    }
+    adapter.get_launcher_id.return_value = 'tenant-key-1:ou_customer_1'
+
+    await service.send_structured_reply(
+        runtime_bot=runtime_bot,
+        event=event,
+        adapter=adapter,
+        material={'reply_text': '您好，这里是飞书客服'},
+    )
+
+    runtime_bot.adapter.send_service_desk_text.assert_awaited_once_with(
+        {
+            'source_entry_id': 'tenant-key-1',
+            'external_user_id': 'ou_customer_1',
+            'last_message_id': 'om_dc1321',
+        },
+        '您好，这里是飞书客服',
+    )
+    ap.monitoring_service.record_message.assert_awaited_once_with(
+        bot_id='bot-1',
+        bot_name='飞书客服机器人',
+        pipeline_id='pipeline-1',
+        pipeline_name='飞书流程',
+        message_content='您好，这里是飞书客服',
+        session_id='person_tenant-key-1:ou_customer_1',
+        status='success',
+        level='info',
+        platform='lark',
+        user_id='ou_customer_1',
+        user_name='客户A',
+        role='assistant',
+    )
