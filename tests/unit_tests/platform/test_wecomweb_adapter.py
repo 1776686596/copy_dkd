@@ -122,10 +122,27 @@ def test_client_config_preserves_polling_and_headless_flags():
         storage_state_dir='./tmp/wecomweb',
         poll_interval_seconds=2,
         headless=False,
+        browser_executable_path='/usr/bin/google-chrome',
     )
 
     assert client.poll_interval_seconds == 2
     assert client.headless is False
+    assert client.browser_executable_path == '/usr/bin/google-chrome'
+
+
+def test_client_from_config_reads_browser_executable_path():
+    from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    client = WecomWebPageClient.from_config(
+        {
+            'account_label': 'escort-account',
+            'workbench_url': 'https://work.weixin.qq.com/kf/',
+            'storage_state_dir': './tmp/wecomweb',
+            'browser_executable_path': '/usr/bin/google-chrome',
+        }
+    )
+
+    assert client.browser_executable_path == '/usr/bin/google-chrome'
 
 
 @pytest.mark.asyncio

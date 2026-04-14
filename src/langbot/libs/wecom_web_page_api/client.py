@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,7 @@ class WecomWebPageClient:
         poll_interval_seconds: int = 2,
         headless: bool = True,
         print_login_qr: bool = True,
+        browser_executable_path: str | None = None,
         selectors: dict[str, list[str]] | None = None,
     ):
         self.account_label = account_label
@@ -81,6 +83,7 @@ class WecomWebPageClient:
         self.poll_interval_seconds = poll_interval_seconds
         self.headless = headless
         self.print_login_qr = print_login_qr
+        self.browser_executable_path = browser_executable_path.strip() if browser_executable_path else None
         self.selectors = self._merge_selectors(selectors)
 
         self._playwright = None
@@ -212,12 +215,51 @@ class WecomWebPageClient:
             raise RuntimeError('Playwright 未安装，请先执行 `playwright install chromium`') from exc
 
         self._playwright = await async_playwright().start()
-        self._browser_context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=self.storage_state_dir,
-            headless=self.headless,
-        )
+        launch_kwargs = self._build_launch_kwargs(self.browser_executable_path)
+
+        try:
+            self._browser_context = await self._playwright.chromium.launch_persistent_context(**launch_kwargs)
+        except Exception as exc:
+            fallback_browser = self._resolve_fallback_browser_executable(exc, launch_kwargs)
+            if fallback_browser is None:
+                raise
+
+            await self._log('warning', f'Playwright 内置浏览器不可用，回退到系统浏览器：{fallback_browser}')
+            launch_kwargs = self._build_launch_kwargs(fallback_browser)
+            self._browser_context = await self._playwright.chromium.launch_persistent_context(**launch_kwargs)
+
         self._page = self._browser_context.pages[0] if self._browser_context.pages else await self._browser_context.new_page()
         await self._page.goto(self.workbench_url, wait_until='domcontentloaded')
+
+    def _build_launch_kwargs(self, executable_path: str | None = None) -> dict[str, Any]:
+        launch_kwargs: dict[str, Any] = {
+            'user_data_dir': self.storage_state_dir,
+            'headless': self.headless,
+        }
+        if executable_path:
+            launch_kwargs['executable_path'] = executable_path
+        return launch_kwargs
+
+    def _resolve_fallback_browser_executable(
+        self,
+        error: Exception,
+        launch_kwargs: dict[str, Any],
+    ) -> str | None:
+        if launch_kwargs.get('executable_path'):
+            return None
+
+        if "Executable doesn't exist" not in str(error):
+            return None
+
+        return self._find_system_browser_executable()
+
+    @staticmethod
+    def _find_system_browser_executable() -> str | None:
+        for candidate in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'):
+            executable_path = shutil.which(candidate)
+            if executable_path:
+                return executable_path
+        return None
 
     async def _is_login_required(self) -> bool:
         qr_locator = await self._find_first_visible_locator(self.selectors['login_qr'])
@@ -493,5 +535,6 @@ class WecomWebPageClient:
             poll_interval_seconds=int(config.get('poll_interval_seconds', 2)),
             headless=WecomWebPageClient._as_bool(config.get('headless', True), True),
             print_login_qr=WecomWebPageClient._as_bool(config.get('print_login_qr', True), True),
+            browser_executable_path=config.get('browser_executable_path'),
             selectors=selectors,
         )

@@ -219,3 +219,54 @@ async def test_wecomweb_client_run_forever_clears_cached_login_state_after_login
         "login_qr_image_base64": None,
         "login_qr_updated_at": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_wecomweb_client_falls_back_to_system_browser_when_builtin_browser_missing(
+    monkeypatch, tmp_path
+):
+    import playwright.async_api as playwright_async_api
+
+    from langbot.libs.wecom_web_page_api import client as wecom_client_module
+    from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    fake_page = SimpleNamespace(goto=AsyncMock())
+    fake_context = SimpleNamespace(pages=[fake_page])
+    launch_context = AsyncMock(
+        side_effect=[
+            RuntimeError("Executable doesn't exist at /root/.cache/ms-playwright/..."),
+            fake_context,
+        ]
+    )
+    fake_playwright = SimpleNamespace(
+        chromium=SimpleNamespace(launch_persistent_context=launch_context)
+    )
+
+    class FakeStarter:
+        async def start(self):
+            return fake_playwright
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeStarter())
+    monkeypatch.setattr(
+        wecom_client_module.shutil,
+        "which",
+        lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None,
+    )
+
+    client = WecomWebPageClient(
+        account_label="escort-account",
+        workbench_url="https://work.weixin.qq.com/kf/",
+        storage_state_dir=str(tmp_path / "wecomweb"),
+    )
+
+    await client._ensure_browser()
+
+    assert launch_context.await_count == 2
+    first_call = launch_context.await_args_list[0].kwargs
+    second_call = launch_context.await_args_list[1].kwargs
+    assert "executable_path" not in first_call
+    assert second_call["executable_path"] == "/usr/bin/google-chrome"
+    fake_page.goto.assert_awaited_once_with(
+        "https://work.weixin.qq.com/kf/",
+        wait_until="domcontentloaded",
+    )

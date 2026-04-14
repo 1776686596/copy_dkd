@@ -75,6 +75,18 @@ spec:
       type: boolean
       required: false
       default: true
+    - name: browser_executable_path
+      label:
+        en_US: Browser Executable Path
+        zh_Hans: 浏览器可执行文件路径
+        zh_Hant: 瀏覽器可執行檔路徑
+      description:
+        en_US: Optional system Chrome or Chromium executable path used when Playwright bundled browser is unavailable
+        zh_Hans: 可选，指定系统 Chrome 或 Chromium 可执行文件路径，在 Playwright 自带浏览器不可用时优先使用
+        zh_Hant: 可選，指定系統 Chrome 或 Chromium 可執行檔路徑，在 Playwright 內建瀏覽器不可用時優先使用
+      type: string
+      required: false
+      default: ""
     - name: print_login_qr
       label:
         en_US: Login Verification Output
