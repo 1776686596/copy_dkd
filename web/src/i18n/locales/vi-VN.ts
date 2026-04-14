@@ -230,12 +230,13 @@ const viVN = {
     selectProvider: 'Chọn nhà cung cấp',
     requester: 'Loại nhà cung cấp',
     selectRequester: 'Chọn loại nhà cung cấp',
-    langbotModelsDescription: 'Mô hình đám mây được cung cấp bởi LangBot Space',
+    langbotModelsDescription:
+      'Mô hình đám mây có thể dùng ngay sau khi đăng nhập',
     credits: 'Tín dụng',
     loginWithSpace: 'Đăng nhập với Space',
     loginToUseModels: 'Đăng nhập với Space để sử dụng mô hình đám mây',
     noModels: 'Chưa cấu hình mô hình nào',
-    langbotModels: 'Mô hình LangBot',
+    langbotModels: 'Mô hình đám mây',
     spaceTrialTooltip:
       'Có tín dụng dùng thử miễn phí! Đăng nhập với Space để truy cập mô hình đám mây không cần cấu hình.',
     unlockModels: 'Đăng nhập để sử dụng',

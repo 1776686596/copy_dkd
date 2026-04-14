@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Plus,
+  Cloud,
   ChevronDown,
   ChevronRight,
   Trash2,
@@ -23,10 +24,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
-import langbotIcon from '@/app/assets/langbot-logo.webp';
 import { ExtraArg, ModelType, TestResult, ProviderModels } from '../types';
 import ModelItem from './ModelItem';
 import AddModelPopover from './AddModelPopover';
+import { getProviderDisplayInfo } from './langbotProviderDisplay.js';
 
 interface ProviderCardProps {
   provider: ModelProvider;
@@ -77,12 +78,6 @@ interface ProviderCardProps {
   onResetTestResult: () => void;
 }
 
-function maskApiKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 8) return '****';
-  return `${key.slice(0, 4)}...${key.slice(-4)}`;
-}
-
 export default function ProviderCard({
   provider,
   isLangBotModels = false,
@@ -116,6 +111,14 @@ export default function ProviderCard({
   const { t } = useTranslation();
   const [deleteProviderConfirmOpen, setDeleteProviderConfirmOpen] =
     useState(false);
+  const displayInfo = getProviderDisplayInfo({
+    isLangBotModels,
+    providerName: provider.name,
+    baseUrl: provider.base_url,
+    apiKeys: provider.api_keys,
+    genericTitle: t('models.langbotModels'),
+    genericDescription: t('models.langbotModelsDescription'),
+  });
 
   const canDelete =
     !isLangBotModels &&
@@ -131,12 +134,8 @@ export default function ProviderCard({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1">
               {isLangBotModels ? (
-                <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
-                    src={langbotIcon}
-                    alt="LangBot"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <Cloud className="h-4 w-4 text-muted-foreground" />
                 </div>
               ) : (
                 <img
@@ -149,24 +148,15 @@ export default function ProviderCard({
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-base">{provider.name}</CardTitle>
+                  <CardTitle className="text-base">
+                    {displayInfo.title}
+                  </CardTitle>
                   <Badge variant="outline" className="text-xs">
                     {t('models.modelsCount', { count: totalModels })}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
-                  {isLangBotModels ? (
-                    t('models.langbotModelsDescription')
-                  ) : (
-                    <>
-                      {provider.base_url}
-                      {provider.base_url &&
-                        provider.api_keys?.length > 0 &&
-                        ' · '}
-                      {provider.api_keys?.length > 0 &&
-                        maskApiKey(provider.api_keys[0])}
-                    </>
-                  )}
+                  {displayInfo.subtitle}
                 </p>
               </div>
             </div>

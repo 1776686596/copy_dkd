@@ -235,12 +235,13 @@ const esES = {
     selectProvider: 'Seleccionar proveedor',
     requester: 'Tipo de proveedor',
     selectRequester: 'Seleccionar tipo de proveedor',
-    langbotModelsDescription: 'Modelos en la nube impulsados por LangBot Space',
+    langbotModelsDescription:
+      'Modelos en la nube disponibles tras iniciar sesión',
     credits: 'Créditos',
     loginWithSpace: 'Iniciar sesión con Space',
     loginToUseModels: 'Inicia sesión con Space para usar modelos en la nube',
     noModels: 'No hay modelos configurados',
-    langbotModels: 'Modelos LangBot',
+    langbotModels: 'Modelos en la nube',
     spaceTrialTooltip:
       '¡Créditos de prueba gratuitos disponibles! Inicia sesión con Space para acceder a modelos en la nube sin configuración.',
     unlockModels: 'Inicia sesión para usar',

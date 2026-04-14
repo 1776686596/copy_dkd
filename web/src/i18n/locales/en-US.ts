@@ -226,12 +226,12 @@ const enUS = {
     selectProvider: 'Select Provider',
     requester: 'Provider Type',
     selectRequester: 'Select Provider Type',
-    langbotModelsDescription: 'Cloud models powered by LangBot Space',
+    langbotModelsDescription: 'Managed cloud models available after login',
     credits: 'Credits',
     loginWithSpace: 'Login with Space',
     loginToUseModels: 'Login with Space to use cloud models',
     noModels: 'No models configured',
-    langbotModels: 'LangBot Models',
+    langbotModels: 'Cloud Models',
     spaceTrialTooltip:
       'Free trial credits available! Login with Space to access cloud models with zero configuration.',
     unlockModels: 'Login to use',
@@ -1043,7 +1043,8 @@ const enUS = {
     entries: {
       tab: 'Entries',
       title: 'FAQ Entries',
-      description: 'View, add and update local FAQ entries directly in this page.',
+      description:
+        'View, add and update local FAQ entries directly in this page.',
       addAction: 'Add Entry',
       addTitle: 'Add FAQ Entry',
       editTitle: 'Edit FAQ Entry',
