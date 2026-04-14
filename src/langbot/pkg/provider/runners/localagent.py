@@ -25,6 +25,26 @@ Respond in the same language as the user's input.
 </user_message>
 """
 
+local_faq_polish_prompt_template = """
+You are polishing a FAQ answer for end users.
+
+Rules:
+1. Keep the original facts unchanged.
+2. Do not add any new promises, discounts, numbers, or claims.
+3. Do not remove key information from the standard answer.
+4. Keep the same language as the user message.
+5. Only do light wording polish. If the standard answer is already suitable, return it directly.
+
+Matched question:
+{matched_question}
+
+User message:
+{user_message}
+
+Standard answer:
+{standard_answer}
+"""
+
 
 @runner.runner_class('local-agent')
 class LocalAgentRunner(runner.RequestRunner):
@@ -66,6 +86,76 @@ class LocalAgentRunner(runner.RequestRunner):
 
         self.ap.logger.info(f'Local FAQ matched for query {query.query_id}: {matched_entry.questions[0]}')
         return matched_entry.answer
+
+    @staticmethod
+    def _extract_message_text(message: provider_message.Message | provider_message.MessageChunk | None) -> str:
+        if message is None or message.content is None:
+            return ''
+        if isinstance(message.content, str):
+            return message.content.strip()
+        if isinstance(message.content, list):
+            texts = [
+                item.text.strip()
+                for item in message.content
+                if item.type == 'text' and item.text and item.text.strip()
+            ]
+            return '\n'.join(texts).strip()
+        return ''
+
+    @staticmethod
+    def _is_local_faq_polish_acceptable(standard_answer: str, polished_answer: str) -> bool:
+        polished = polished_answer.strip()
+        if not polished:
+            return False
+        if polished == standard_answer.strip():
+            return True
+        if len(polished) < max(8, int(len(standard_answer.strip()) * 0.4)):
+            return False
+        return local_faq._similarity_score(standard_answer, polished) >= 0.35
+
+    async def _polish_local_faq_answer(
+        self,
+        query: pipeline_query.Query,
+        user_message_text: str,
+        matched_question: str,
+        standard_answer: str,
+    ) -> str:
+        candidates = await self._get_model_candidates(query)
+        if not candidates:
+            return standard_answer
+
+        remove_think = query.pipeline_config.get('output', {}).get('misc', {}).get('remove-think')
+        prompt = local_faq_polish_prompt_template.format(
+            matched_question=matched_question or user_message_text,
+            user_message=user_message_text,
+            standard_answer=standard_answer,
+        )
+        messages = [provider_message.Message(role='user', content=prompt)]
+
+        try:
+            msg, _ = await self._invoke_with_fallback(query, candidates, messages, [], remove_think)
+        except Exception as exc:
+            self.ap.logger.warning(f'Local FAQ polish failed for query {query.query_id}: {exc}')
+            return standard_answer
+
+        polished_answer = self._extract_message_text(msg)
+        if not self._is_local_faq_polish_acceptable(standard_answer, polished_answer):
+            self.ap.logger.info(f'Local FAQ polish fallback to standard answer for query {query.query_id}')
+            return standard_answer
+
+        return polished_answer
+
+    @staticmethod
+    def _extract_local_faq_retrieve_result(
+        results: list[rag_context.RetrievalResultEntry],
+    ) -> tuple[str, str] | None:
+        for entry in results:
+            metadata = entry.metadata or {}
+            answer = metadata.get('local_faq_answer')
+            if isinstance(answer, str) and answer.strip():
+                matched_question = str(metadata.get('matched_question') or '').strip()
+                return answer.strip(), matched_question
+        return None
 
     async def _get_model_candidates(
         self,
@@ -193,15 +283,21 @@ class LocalAgentRunner(runner.RequestRunner):
 
         local_faq_answer = self._match_local_faq_answer(query, user_message_text)
         if local_faq_answer is not None:
+            reply_text = await self._polish_local_faq_answer(
+                query=query,
+                user_message_text=user_message_text,
+                matched_question=user_message_text,
+                standard_answer=local_faq_answer,
+            )
             if is_stream:
                 yield provider_message.MessageChunk(
                     role='assistant',
-                    content=local_faq_answer,
+                    content=reply_text,
                     is_final=True,
                     msg_sequence=1,
                 )
             else:
-                yield provider_message.Message(role='assistant', content=local_faq_answer)
+                yield provider_message.Message(role='assistant', content=reply_text)
             return
 
         if kb_uuids and user_message_text:
@@ -227,6 +323,26 @@ class LocalAgentRunner(runner.RequestRunner):
 
                 if result:
                     all_results.extend(result)
+
+            local_faq_result = self._extract_local_faq_retrieve_result(all_results)
+            if local_faq_result is not None:
+                standard_answer, matched_question = local_faq_result
+                reply_text = await self._polish_local_faq_answer(
+                    query=query,
+                    user_message_text=user_message_text,
+                    matched_question=matched_question or user_message_text,
+                    standard_answer=standard_answer,
+                )
+                if is_stream:
+                    yield provider_message.MessageChunk(
+                        role='assistant',
+                        content=reply_text,
+                        is_final=True,
+                        msg_sequence=1,
+                    )
+                else:
+                    yield provider_message.Message(role='assistant', content=reply_text)
+                return
 
             final_user_message_text = ''
 

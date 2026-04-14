@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 
 def _write_local_faq(path: Path, entries: list[dict]) -> None:
@@ -70,3 +73,91 @@ def test_match_local_faq_entry_returns_none_when_below_threshold(tmp_path):
     matched = local_faq.match_local_faq_entry(entries, '今天天气怎么样', min_similarity=0.98)
 
     assert matched is None
+
+
+@pytest.mark.asyncio
+async def test_polish_local_faq_answer_returns_model_reply_when_close():
+    import langbot_plugin.api.entities.builtin.provider.message as provider_message
+
+    from langbot.pkg.provider.runners.localagent import LocalAgentRunner
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    runner = LocalAgentRunner(mock_app, pipeline_config={})
+
+    mock_model = Mock()
+    runner._get_model_candidates = AsyncMock(return_value=[mock_model])
+    runner._invoke_with_fallback = AsyncMock(
+        return_value=(
+            provider_message.Message(
+                role='assistant',
+                content='更推荐鬼王，前期开荒更快，焚天更适合中后期团战。',
+            ),
+            mock_model,
+        )
+    )
+
+    query = Mock()
+    query.pipeline_config = {'output': {'misc': {'remove-think': False}}}
+
+    result = await runner._polish_local_faq_answer(
+        query=query,
+        user_message_text='哪个职业好玩',
+        matched_question='哪个职业好玩？',
+        standard_answer='鬼王前期开荒更快，焚天更适合中后期团战。',
+    )
+
+    assert result == '更推荐鬼王，前期开荒更快，焚天更适合中后期团战。'
+
+
+@pytest.mark.asyncio
+async def test_polish_local_faq_answer_falls_back_when_model_reply_is_off_topic():
+    import langbot_plugin.api.entities.builtin.provider.message as provider_message
+
+    from langbot.pkg.provider.runners.localagent import LocalAgentRunner
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    runner = LocalAgentRunner(mock_app, pipeline_config={})
+
+    mock_model = Mock()
+    runner._get_model_candidates = AsyncMock(return_value=[mock_model])
+    runner._invoke_with_fallback = AsyncMock(
+        return_value=(provider_message.Message(role='assistant', content='今天天气不错。'), mock_model)
+    )
+
+    query = Mock()
+    query.pipeline_config = {'output': {'misc': {'remove-think': False}}}
+
+    result = await runner._polish_local_faq_answer(
+        query=query,
+        user_message_text='哪个职业好玩',
+        matched_question='哪个职业好玩？',
+        standard_answer='鬼王前期开荒更快，焚天更适合中后期团战。',
+    )
+
+    assert result == '鬼王前期开荒更快，焚天更适合中后期团战。'
+
+
+@pytest.mark.asyncio
+async def test_polish_local_faq_answer_falls_back_when_model_raises():
+    from langbot.pkg.provider.runners.localagent import LocalAgentRunner
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    runner = LocalAgentRunner(mock_app, pipeline_config={})
+
+    runner._get_model_candidates = AsyncMock(return_value=[Mock()])
+    runner._invoke_with_fallback = AsyncMock(side_effect=RuntimeError('model failed'))
+
+    query = Mock()
+    query.pipeline_config = {'output': {'misc': {'remove-think': False}}}
+
+    result = await runner._polish_local_faq_answer(
+        query=query,
+        user_message_text='哪个职业好玩',
+        matched_question='哪个职业好玩？',
+        standard_answer='鬼王前期开荒更快，焚天更适合中后期团战。',
+    )
+
+    assert result == '鬼王前期开荒更快，焚天更适合中后期团战。'
