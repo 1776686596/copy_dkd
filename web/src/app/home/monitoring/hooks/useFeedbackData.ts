@@ -1,17 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { httpClient } from '@/app/infra/http';
 import { FeedbackRecord, FeedbackStats } from '../types/monitoring';
 import { parseUTCTimestamp } from '../utils/dateUtils';
-
-interface UseFeedbackDataParams {
-  botIds?: string[];
-  pipelineIds?: string[];
-  startTime?: string;
-  endTime?: string;
-  feedbackType?: 'like' | 'dislike';
-  limit?: number;
-  offset?: number;
-}
+import {
+  buildFeedbackListQuery,
+  buildFeedbackStatsQuery,
+} from './feedbackQueryBuilders.js';
+import type { UseFeedbackDataParams } from './feedbackQueryBuilders';
 
 interface RawFeedbackRecord {
   id: string;
@@ -54,29 +49,13 @@ export function useFeedbackData(params: UseFeedbackDataParams = {}) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-
-  const paramsStr = useMemo(() => JSON.stringify(params), [params]);
+  const statsQuery = buildFeedbackStatsQuery(params);
+  const feedbackQuery = buildFeedbackListQuery(params);
 
   const fetchStats = useCallback(async () => {
     try {
-      const queryParams = new URLSearchParams();
-      if (params.botIds) {
-        params.botIds.forEach((id) => queryParams.append('botId', id));
-      }
-      if (params.pipelineIds) {
-        params.pipelineIds.forEach((id) =>
-          queryParams.append('pipelineId', id),
-        );
-      }
-      if (params.startTime) {
-        queryParams.append('startTime', params.startTime);
-      }
-      if (params.endTime) {
-        queryParams.append('endTime', params.endTime);
-      }
-
       const result = await httpClient.get<RawFeedbackStats>(
-        `/api/v1/monitoring/feedback/stats?${queryParams.toString()}`,
+        `/api/v1/monitoring/feedback/stats?${statsQuery}`,
       );
 
       if (result) {
@@ -99,45 +78,17 @@ export function useFeedbackData(params: UseFeedbackDataParams = {}) {
     } catch (err) {
       console.error('Failed to fetch feedback stats:', err);
     }
-  }, [params.botIds, params.pipelineIds, params.startTime, params.endTime]);
+  }, [statsQuery]);
 
   const fetchFeedback = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const queryParams = new URLSearchParams();
-      if (params.botIds) {
-        params.botIds.forEach((id) => queryParams.append('botId', id));
-      }
-      if (params.pipelineIds) {
-        params.pipelineIds.forEach((id) =>
-          queryParams.append('pipelineId', id),
-        );
-      }
-      if (params.startTime) {
-        queryParams.append('startTime', params.startTime);
-      }
-      if (params.endTime) {
-        queryParams.append('endTime', params.endTime);
-      }
-      if (params.feedbackType) {
-        queryParams.append(
-          'feedbackType',
-          params.feedbackType === 'like' ? '1' : '2',
-        );
-      }
-      if (params.limit) {
-        queryParams.append('limit', params.limit.toString());
-      }
-      if (params.offset) {
-        queryParams.append('offset', params.offset.toString());
-      }
-
       const result = await httpClient.get<{
         feedback: RawFeedbackRecord[];
         total: number;
-      }>(`/api/v1/monitoring/feedback?${queryParams.toString()}`);
+      }>(`/api/v1/monitoring/feedback?${feedbackQuery}`);
 
       if (result) {
         const transformedFeedback: FeedbackRecord[] = result.feedback.map(
@@ -171,16 +122,16 @@ export function useFeedbackData(params: UseFeedbackDataParams = {}) {
     } finally {
       setLoading(false);
     }
-  }, [params]);
+  }, [feedbackQuery]);
 
   const refetch = useCallback(() => {
-    fetchStats();
-    fetchFeedback();
+    void fetchStats();
+    void fetchFeedback();
   }, [fetchStats, fetchFeedback]);
 
   useEffect(() => {
-    refetch();
-  }, [paramsStr, refetch]);
+    void refetch();
+  }, [refetch]);
 
   return {
     feedback,
