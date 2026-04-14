@@ -286,6 +286,7 @@ const enUS = {
       pendingActive: 'Waiting Manual',
     },
     queueStatus: {
+      all: 'All',
       pending_manual: 'Pending Manual',
       manual: 'Manual',
       silent: 'Silent',

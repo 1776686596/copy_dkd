@@ -257,7 +257,7 @@ const zhHans = {
     description: '处理企微客服与飞书私聊的人工接管、规则配置和快捷素材',
     heroTitle: '客服工作台',
     heroDescription:
-      '围绕人工接管、规则切换和素材回复组织为单页调度台，支持企微客服与飞书私聊演示和坐席值守。',
+      '围绕人工接管、规则切换和素材回复组织为单页调度台，支持企微客服与飞书私聊接入和坐席值守。',
     wecomOnlyHint: '当前展示适配器为 `wecomcs` 或 `lark` 的客服渠道机器人。',
     noBotsTitle: '还没有可用的客服渠道机器人',
     noBotsDescription:
@@ -274,6 +274,7 @@ const zhHans = {
       pendingActive: '等待人工',
     },
     queueStatus: {
+      all: '全部',
       pending_manual: '待人工',
       manual: '人工中',
       silent: '静默中',

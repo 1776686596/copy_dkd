@@ -12,13 +12,15 @@ import {
 } from '@/components/ui/select';
 import { ServiceDeskQueueStatus } from '@/app/infra/entities/api';
 
+type ServiceDeskQueueFilter = ServiceDeskQueueStatus | 'all';
+
 interface SessionFiltersProps {
-  queueFilters: ServiceDeskQueueStatus[];
-  queueFilter: ServiceDeskQueueStatus;
+  queueFilters: ServiceDeskQueueFilter[];
+  queueFilter: ServiceDeskQueueFilter;
   searchKeyword: string;
   claimedByFilter: string;
   loading: boolean;
-  onQueueFilterChange: (value: ServiceDeskQueueStatus) => void;
+  onQueueFilterChange: (value: ServiceDeskQueueFilter) => void;
   onSearchKeywordChange: (value: string) => void;
   onClaimedByFilterChange: (value: string) => void;
   onRefresh: () => void;

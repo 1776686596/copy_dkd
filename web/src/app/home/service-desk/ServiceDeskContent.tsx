@@ -35,8 +35,10 @@ import MaterialManager from './components/MaterialManager';
 import SessionFilters from './components/SessionFilters';
 
 type ServiceDeskBot = Bot & { uuid: string };
+type ServiceDeskQueueFilter = ServiceDeskSession['queue_status'] | 'all';
 
-const QUEUE_FILTERS: ServiceDeskSession['queue_status'][] = [
+const QUEUE_FILTERS: ServiceDeskQueueFilter[] = [
+  'all',
   'pending_manual',
   'manual',
   'silent',
@@ -53,8 +55,7 @@ export default function ServiceDeskContent() {
   const [bots, setBots] = useState<ServiceDeskBot[]>([]);
   const [configs, setConfigs] = useState<ServiceDeskBotConfig[]>([]);
   const [selectedBotUuid, setSelectedBotUuid] = useState('');
-  const [queueFilter, setQueueFilter] =
-    useState<ServiceDeskSession['queue_status']>('pending_manual');
+  const [queueFilter, setQueueFilter] = useState<ServiceDeskQueueFilter>('all');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [claimedByFilter, setClaimedByFilter] = useState('all');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -109,7 +110,7 @@ export default function ServiceDeskContent() {
       try {
         const resp = await httpClient.getServiceDeskSessions({
           botUuid: selectedBotUuid,
-          queueStatus: queueFilter,
+          queueStatus: queueFilter === 'all' ? undefined : queueFilter,
           claimedBy: claimedByFilter === 'all' ? undefined : claimedByFilter,
           keyword: searchKeyword.trim() || undefined,
           limit: 50,
