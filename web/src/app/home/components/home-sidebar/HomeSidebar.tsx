@@ -112,6 +112,9 @@ function compareVersions(v1: string, v2: string): boolean {
   return false;
 }
 
+const SIDEBAR_BRAND_NAME = '传奇bot';
+const SIDEBAR_DISPLAY_VERSION = 'v0.1';
+
 // IDs of sidebar entries that have collapsible entity sub-items
 const ENTITY_CATEGORY_IDS = [
   'bots',
@@ -1231,18 +1234,20 @@ export default function HomeSidebar({
               <SidebarMenuButton
                 size="lg"
                 className="cursor-default hover:bg-transparent active:bg-transparent"
-                tooltip="LangBot"
+                tooltip={SIDEBAR_BRAND_NAME}
               >
                 <img
                   src={langbotIcon}
-                  alt="LangBot"
+                  alt={SIDEBAR_BRAND_NAME}
                   className="size-8 rounded-lg"
                 />
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">LangBot</span>
+                  <span className="truncate font-semibold">
+                    {SIDEBAR_BRAND_NAME}
+                  </span>
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-xs text-muted-foreground">
-                      {systemInfo?.version}
+                      {SIDEBAR_DISPLAY_VERSION}
                     </span>
                     {hasNewVersion && (
                       <Badge
