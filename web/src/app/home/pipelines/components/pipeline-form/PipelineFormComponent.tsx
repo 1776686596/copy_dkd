@@ -170,6 +170,32 @@ export default function PipelineFormComponent({
     useState<PipelineConfigTab>();
   const [outputConfigTabSchema, setOutputConfigTabSchema] =
     useState<PipelineConfigTab>();
+  const localAgentConfigGroups = useMemo(() => {
+    const localAgentStage = aiConfigTabSchema?.stages?.find(
+      (stage) => stage.name === 'local-agent',
+    );
+    const stageConfigItems = localAgentStage?.config || [];
+
+    return {
+      modelConfigItems: stageConfigItems.filter((item) =>
+        ['model', 'max-round'].includes(item.name),
+      ),
+      knowledgeConfigItems: stageConfigItems.filter((item) =>
+        [
+          'knowledge-bases',
+          'local-faq-enabled',
+          'local-faq-path',
+          'local-faq-min-similarity',
+        ].includes(item.name),
+      ),
+      advancedPromptItems: stageConfigItems
+        .filter((item) => item.name === 'prompt')
+        .map((item) => ({
+          ...item,
+          show_if: undefined,
+        })),
+    };
+  }, [aiConfigTabSchema]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -324,13 +350,10 @@ export default function PipelineFormComponent({
       (form.getValues(formName) as Record<string, any>) || {};
     const currentStageValues =
       (currentValues[stageName] as Record<string, any>) || {};
-    form.setValue(formName, {
-      ...currentValues,
-      [stageName]: {
-        ...currentStageValues,
-        ...values,
-      },
-    });
+    const nextStageValues = {
+      ...currentStageValues,
+      ...values,
+    };
 
     if (isFirstEmission) {
       initializedStagesRef.current.add(stageKey);
@@ -338,6 +361,17 @@ export default function PipelineFormComponent({
       // in the same render cycle still returns false.
       savedSnapshotRef.current = JSON.stringify(form.getValues());
     }
+
+    if (
+      JSON.stringify(currentStageValues) === JSON.stringify(nextStageValues)
+    ) {
+      return;
+    }
+
+    form.setValue(formName, {
+      ...currentValues,
+      [stageName]: nextStageValues,
+    });
   }
 
   function handleStageFieldChange(
@@ -350,6 +384,9 @@ export default function PipelineFormComponent({
       (form.getValues(formName) as Record<string, any>) || {};
     const currentStageValues =
       (currentValues[stageName] as Record<string, any>) || {};
+    if (currentStageValues[fieldName] === value) {
+      return;
+    }
 
     form.setValue(
       formName,
@@ -441,24 +478,6 @@ export default function PipelineFormComponent({
           ((form.watch(formName) as Record<string, any>)?.[stage.name] as
             | Record<string, any>
             | undefined) || {};
-        const stageConfigItems = stage.config || [];
-        const modelConfigItems = stageConfigItems.filter((item) =>
-          ['model', 'max-round'].includes(item.name),
-        );
-        const knowledgeConfigItems = stageConfigItems.filter((item) =>
-          [
-            'knowledge-bases',
-            'local-faq-enabled',
-            'local-faq-path',
-            'local-faq-min-similarity',
-          ].includes(item.name),
-        );
-        const advancedPromptItems = stageConfigItems
-          .filter((item) => item.name === 'prompt')
-          .map((item) => ({
-            ...item,
-            show_if: undefined,
-          }));
         const showAdvanced = Boolean(stageValues['show-advanced-prompt']);
 
         return (
@@ -482,7 +501,7 @@ export default function PipelineFormComponent({
               </div>
 
               <DynamicFormComponent
-                itemConfigList={modelConfigItems}
+                itemConfigList={localAgentConfigGroups.modelConfigItems}
                 initialValues={stageValues}
                 onSubmit={(values) => {
                   handleDynamicFormEmit(formName, stage.name, values);
@@ -586,7 +605,7 @@ export default function PipelineFormComponent({
                   </p>
                 </div>
                 <DynamicFormComponent
-                  itemConfigList={knowledgeConfigItems}
+                  itemConfigList={localAgentConfigGroups.knowledgeConfigItems}
                   initialValues={stageValues}
                   onSubmit={(values) => {
                     handleDynamicFormEmit(formName, stage.name, values);
@@ -633,7 +652,7 @@ export default function PipelineFormComponent({
                         <span>{t('pipelines.localAgentAdvancedPromptOnly')}</span>
                       </div>
                       <DynamicFormComponent
-                        itemConfigList={advancedPromptItems}
+                        itemConfigList={localAgentConfigGroups.advancedPromptItems}
                         initialValues={stageValues}
                         onSubmit={(values) => {
                           handleDynamicFormEmit(formName, stage.name, values);
