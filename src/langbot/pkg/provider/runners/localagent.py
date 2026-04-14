@@ -5,6 +5,7 @@ import copy
 import typing
 from .. import runner
 from ..modelmgr import requester as modelmgr_requester
+from ...utils import local_faq
 import langbot_plugin.api.entities.builtin.pipeline.query as pipeline_query
 import langbot_plugin.api.entities.builtin.provider.message as provider_message
 import langbot_plugin.api.entities.builtin.rag.context as rag_context
@@ -28,6 +29,43 @@ Respond in the same language as the user's input.
 @runner.runner_class('local-agent')
 class LocalAgentRunner(runner.RequestRunner):
     """Local agent request runner"""
+
+    @staticmethod
+    def _get_local_faq_config(query: pipeline_query.Query) -> dict[str, typing.Any]:
+        local_agent_config = query.pipeline_config.get('ai', {}).get('local-agent', {})
+        nested_config = local_agent_config.get('local-faq', {})
+        if isinstance(nested_config, dict) and nested_config:
+            return nested_config
+
+        return {
+            'enabled': local_agent_config.get('local-faq-enabled', False),
+            'path': local_agent_config.get('local-faq-path', ''),
+            'min_similarity': local_agent_config.get('local-faq-min-similarity', 0.95),
+        }
+
+    def _match_local_faq_answer(self, query: pipeline_query.Query, user_message_text: str) -> str | None:
+        local_faq_config = self._get_local_faq_config(query)
+        if not local_faq_config.get('enabled') or not user_message_text:
+            return None
+
+        path = str(local_faq_config.get('path', '')).strip()
+        if not path:
+            return None
+
+        min_similarity = float(local_faq_config.get('min_similarity', 0.95))
+
+        try:
+            entries = local_faq.load_local_faq_entries(path)
+            matched_entry = local_faq.match_local_faq_entry(entries, user_message_text, min_similarity=min_similarity)
+        except Exception as exc:
+            self.ap.logger.warning(f'Failed to load local FAQ from {path}: {exc}')
+            return None
+
+        if matched_entry is None:
+            return None
+
+        self.ap.logger.info(f'Local FAQ matched for query {query.query_id}: {matched_entry.questions[0]}')
+        return matched_entry.answer
 
     async def _get_model_candidates(
         self,
@@ -148,6 +186,24 @@ class LocalAgentRunner(runner.RequestRunner):
                     user_message_text += ce.text
                     break
 
+        try:
+            is_stream = await query.adapter.is_stream_output_supported()
+        except AttributeError:
+            is_stream = False
+
+        local_faq_answer = self._match_local_faq_answer(query, user_message_text)
+        if local_faq_answer is not None:
+            if is_stream:
+                yield provider_message.MessageChunk(
+                    role='assistant',
+                    content=local_faq_answer,
+                    is_final=True,
+                    msg_sequence=1,
+                )
+            else:
+                yield provider_message.Message(role='assistant', content=local_faq_answer)
+            return
+
         if kb_uuids and user_message_text:
             # only support text for now
             all_results: list[rag_context.RetrievalResultEntry] = []
@@ -198,11 +254,6 @@ class LocalAgentRunner(runner.RequestRunner):
                     break
 
         req_messages = query.prompt.messages.copy() + query.messages.copy() + [user_message]
-
-        try:
-            is_stream = await query.adapter.is_stream_output_supported()
-        except AttributeError:
-            is_stream = False
 
         remove_think = query.pipeline_config['output'].get('misc', '').get('remove-think')
 

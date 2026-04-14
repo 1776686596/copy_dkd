@@ -104,6 +104,48 @@ stages:
           field: __system.is_wizard
           operator: neq
           value: true
+      - name: local-faq-enabled
+        label:
+          en_US: Local FAQ Direct Reply
+          zh_Hans: 本地问答直答
+        description:
+          en_US: Reply directly from a local FAQ file before invoking the LLM. Best for small, highly precise scripted Q&A.
+          zh_Hans: 在调用模型前，优先从本地问答文件直接回复。适合小体量、需要高精度命中的固定问答。
+        type: boolean
+        required: false
+        default: false
+        show_if:
+          field: __system.is_wizard
+          operator: neq
+          value: true
+      - name: local-faq-path
+        label:
+          en_US: Local FAQ File Path
+          zh_Hans: 本地问答文件路径
+        description:
+          en_US: Relative or absolute JSON path. The file should contain an array of {questions, answer}.
+          zh_Hans: 支持相对或绝对 JSON 路径，文件内容需为 {questions, answer} 数组。
+        type: string
+        required: false
+        default: ''
+        show_if:
+          field: local-faq-enabled
+          operator: eq
+          value: true
+      - name: local-faq-min-similarity
+        label:
+          en_US: Local FAQ Min Similarity
+          zh_Hans: 本地问答最低匹配度
+        description:
+          en_US: Only answers whose normalized similarity is greater than or equal to this value will be returned directly.
+          zh_Hans: 只有归一化匹配度大于等于该值时，才会直接返回标准答案。
+        type: float
+        required: false
+        default: 0.95
+        show_if:
+          field: local-faq-enabled
+          operator: eq
+          value: true
   - name: dify-service-api
     label:
       en_US: Dify Service API
