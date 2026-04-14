@@ -217,6 +217,30 @@ async def test_builtin_local_faq_runtime_retrieve_returns_matching_entry():
 
 
 @pytest.mark.asyncio
+async def test_builtin_local_faq_create_knowledge_base_succeeds_without_plugin_hook():
+    from langbot.pkg.rag.knowledge.kbmgr import RAGManager
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.plugin_connector = Mock(is_enable_plugin=False)
+    mock_app.persistence_mgr = Mock()
+    mock_app.persistence_mgr.execute_async = AsyncMock()
+
+    manager = RAGManager(mock_app)
+
+    kb = await manager.create_knowledge_base(
+        name='本地问答库',
+        knowledge_engine_plugin_id='builtin/local-faq',
+        creation_settings={},
+        retrieval_settings={},
+        description='',
+    )
+
+    assert kb.uuid in manager.knowledge_bases
+    assert manager.knowledge_bases[kb.uuid].get_knowledge_engine_plugin_id() == 'builtin/local-faq'
+
+
+@pytest.mark.asyncio
 async def test_get_local_faq_entries_serializes_rows():
     from langbot.pkg.api.http.service.knowledge import KnowledgeService
     from langbot.pkg.entity.persistence import rag as persistence_rag

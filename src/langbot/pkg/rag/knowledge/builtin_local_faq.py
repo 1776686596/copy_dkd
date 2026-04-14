@@ -69,6 +69,14 @@ class LocalFAQKnowledgeBase:
     async def initialize(self):
         return None
 
+    async def _on_kb_create(self) -> None:
+        """内置知识库不依赖插件回调，创建时无需额外动作。"""
+        return None
+
+    async def _on_kb_delete(self) -> None:
+        """内置知识库不依赖插件回调，删除时无需额外动作。"""
+        return None
+
     async def store_file(self, file_id: str, parser_plugin_id: str | None = None) -> str:
         if not await self.ap.storage_mgr.storage_provider.exists(file_id):
             raise Exception(f'File {file_id} not found')
