@@ -276,6 +276,8 @@ class WecomWebPageClient:
     async def _show_login_qr(self) -> None:
         qr_locator = await self._find_first_visible_locator(self.selectors['login_qr'])
         if qr_locator is None:
+            self._clear_login_runtime_state(checked=True)
+            self._login_required = True
             return
 
         qr_png = await qr_locator.screenshot()

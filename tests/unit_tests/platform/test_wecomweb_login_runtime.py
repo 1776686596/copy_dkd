@@ -32,6 +32,28 @@ async def test_wecomweb_client_caches_login_qr_runtime_state(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_wecomweb_client_marks_login_checked_when_qr_not_ready_yet():
+    from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    client = WecomWebPageClient(
+        account_label="escort-account",
+        workbench_url="https://work.weixin.qq.com/kf/",
+        storage_state_dir="./tmp/wecomweb",
+    )
+
+    client._find_first_visible_locator = AsyncMock(return_value=None)
+
+    await client._show_login_qr()
+
+    assert client.get_login_runtime_state() == {
+        "login_state_checked": True,
+        "login_required": True,
+        "login_qr_image_base64": None,
+        "login_qr_updated_at": None,
+    }
+
+
+@pytest.mark.asyncio
 async def test_wecomweb_client_run_forever_prints_same_qr_again_after_login_restored(monkeypatch, capsys):
     from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
 
