@@ -31,6 +31,7 @@ import {
   MessageSquareReply,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import SessionList from './components/SessionList';
 import SessionDetail from './components/SessionDetail';
 import BotDeskConfigForm from './components/BotDeskConfigForm';
@@ -65,6 +66,13 @@ function getChannelBadgeClass(adapter: string) {
     return 'border-sky-200 bg-sky-50 text-sky-700';
   }
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function getChannelSurfaceClass(adapter: string) {
+  if (adapter === 'lark') {
+    return 'bg-[linear-gradient(160deg,rgba(240,249,255,0.98),rgba(255,255,255,0.94)_45%,rgba(224,242,254,0.88))]';
+  }
+  return 'bg-[linear-gradient(160deg,rgba(240,253,244,0.98),rgba(255,255,255,0.94)_45%,rgba(220,252,231,0.88))]';
 }
 
 export default function ServiceDeskContent() {
@@ -197,6 +205,16 @@ export default function ServiceDeskContent() {
     [bots],
   );
 
+  const overviewGridClassName = useMemo(() => {
+    if (bots.length <= 1) {
+      return 'grid-cols-1';
+    }
+    if (bots.length === 2) {
+      return 'grid-cols-1 xl:grid-cols-2';
+    }
+    return 'grid-cols-1 md:grid-cols-2 2xl:grid-cols-3';
+  }, [bots.length]);
+
   const openWorkspace = useCallback(
     (botUuid: string, tab: string = 'workbench') => {
       setSelectedBotUuid(botUuid);
@@ -232,120 +250,139 @@ export default function ServiceDeskContent() {
   if (viewMode === 'overview') {
     return (
       <div className="flex h-full flex-col gap-6">
-        <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <Card className="rounded-[28px] border-border/70 bg-[linear-gradient(165deg,rgba(255,255,255,0.98),rgba(244,247,251,0.92))] shadow-sm">
-            <CardHeader className="space-y-4">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+        <section className="rounded-[32px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,250,252,0.95)_46%,rgba(241,245,249,0.9))] px-6 py-6 shadow-sm">
+          <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-end 2xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
                 <Headset className="size-3.5 text-primary" />
                 {t('serviceDesk.title')}
               </div>
               <div className="space-y-2">
-                <CardTitle className="text-2xl">
+                <h1 className="text-3xl font-semibold tracking-tight">
                   {t('serviceDesk.overview.title')}
-                </CardTitle>
-                <CardDescription className="text-sm leading-6">
+                </h1>
+                <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
                   {t('serviceDesk.overview.description')}
-                </CardDescription>
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 2xl:min-w-[560px]">
+              <div className="rounded-2xl border border-border/70 bg-background/88 px-4 py-4">
                 <div className="text-xs text-muted-foreground">
                   {t('serviceDesk.overview.botCount')}
                 </div>
-                <div className="mt-1 text-2xl font-semibold">{bots.length}</div>
+                <div className="mt-2 text-3xl font-semibold">{bots.length}</div>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+              <div className="rounded-2xl border border-border/70 bg-background/88 px-4 py-4">
                 <div className="text-xs text-muted-foreground">
                   {t('serviceDesk.overview.channelCount')}
                 </div>
-                <div className="mt-1 text-2xl font-semibold">
+                <div className="mt-2 text-3xl font-semibold">
                   {distinctChannelCount}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {bots.map((bot) => {
-              const botConfig =
-                configs.find((item) => item.bot_uuid === bot.uuid) ?? null;
-              const channelLabel = getChannelLabel(bot.adapter, t);
-              const channelBadgeClass = getChannelBadgeClass(bot.adapter);
-
-              return (
-                <Card
-                  key={bot.uuid}
-                  className="rounded-[28px] border-border/70 bg-background shadow-sm transition-colors hover:border-primary/40"
-                >
-                  <CardHeader className="space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <Badge
-                        variant="outline"
-                        className={channelBadgeClass}
-                      >
-                        {channelLabel}
-                      </Badge>
-                      <Badge variant="secondary">
-                        {botConfig?.enabled
-                          ? t('serviceDesk.overview.ruleEnabled')
-                          : t('serviceDesk.overview.ruleDisabled')}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2">
-                      <CardTitle className="text-lg">{bot.name}</CardTitle>
-                      <CardDescription className="line-clamp-2 min-h-10 text-sm leading-6">
-                        {bot.description || t('serviceDesk.heroDescription')}
-                      </CardDescription>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-3 text-sm">
-                      <div className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3">
-                        <div className="text-xs text-muted-foreground">
-                          {t('serviceDesk.config.adapterType')}
-                        </div>
-                        <div className="mt-1 font-medium">{channelLabel}</div>
-                      </div>
-                      <div className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3">
-                        <div className="text-xs text-muted-foreground">
-                          {t('serviceDesk.config.pipelineBinding')}
-                        </div>
-                        <div className="mt-1 break-all font-medium">
-                          {bot.use_pipeline_name ||
-                            bot.use_pipeline_uuid ||
-                            t('common.none')}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        onClick={() => openWorkspace(bot.uuid, 'workbench')}
-                      >
-                        {t('serviceDesk.overview.enterWorkbench')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => openWorkspace(bot.uuid, 'bot-config')}
-                      >
-                        {t('serviceDesk.overview.openRules')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => openWorkspace(bot.uuid, 'materials')}
-                      >
-                        {t('serviceDesk.overview.openMaterials')}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+              <div className="rounded-2xl border border-border/70 bg-background/88 px-4 py-4">
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.summary.selectedBot')}
+                </div>
+                <div className="mt-2 truncate text-lg font-semibold">
+                  {selectedBot?.name ?? bots[0]?.name ?? t('common.none')}
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
+
+        <section className={cn('grid auto-rows-fr gap-4', overviewGridClassName)}>
+          {bots.map((bot) => {
+            const botConfig =
+              configs.find((item) => item.bot_uuid === bot.uuid) ?? null;
+            const channelLabel = getChannelLabel(bot.adapter, t);
+            const channelBadgeClass = getChannelBadgeClass(bot.adapter);
+            const channelSurfaceClass = getChannelSurfaceClass(bot.adapter);
+
+            return (
+              <Card
+                key={bot.uuid}
+                className={cn(
+                  'relative overflow-hidden rounded-[32px] border-border/70 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40',
+                  channelSurfaceClass,
+                )}
+              >
+                <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.86),transparent_68%)]" />
+                <CardHeader className="relative space-y-5 pb-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <Badge
+                      variant="outline"
+                      className={channelBadgeClass}
+                    >
+                      {channelLabel}
+                    </Badge>
+                    <Badge variant="secondary">
+                      {botConfig?.enabled
+                        ? t('serviceDesk.overview.ruleEnabled')
+                        : t('serviceDesk.overview.ruleDisabled')}
+                    </Badge>
+                  </div>
+                  <div className="space-y-3">
+                    <CardTitle className="text-2xl">{bot.name}</CardTitle>
+                    <CardDescription className="min-h-12 max-w-xl text-sm leading-7 text-muted-foreground">
+                      {bot.description || t('serviceDesk.heroDescription')}
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="relative flex h-full flex-col gap-5 pt-0">
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    <div className="rounded-2xl border border-border/70 bg-background/78 px-4 py-4">
+                      <div className="text-xs text-muted-foreground">
+                        {t('serviceDesk.config.pipelineBinding')}
+                      </div>
+                      <div className="mt-2 break-all text-sm font-medium leading-6">
+                        {bot.use_pipeline_name ||
+                          bot.use_pipeline_uuid ||
+                          t('common.none')}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-background/78 px-4 py-4">
+                      <div className="text-xs text-muted-foreground">
+                        {t('serviceDesk.config.adapterType')}
+                      </div>
+                      <div className="mt-2 text-sm font-medium">
+                        {channelLabel}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="lg"
+                      onClick={() => openWorkspace(bot.uuid, 'workbench')}
+                    >
+                      {t('serviceDesk.overview.enterWorkbench')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="outline"
+                      onClick={() => openWorkspace(bot.uuid, 'bot-config')}
+                    >
+                      {t('serviceDesk.overview.openRules')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="ghost"
+                      onClick={() => openWorkspace(bot.uuid, 'materials')}
+                    >
+                      {t('serviceDesk.overview.openMaterials')}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </section>
       </div>
     );
