@@ -278,6 +278,14 @@ class WecomWebPageClient:
         if qr_locator is None:
             self._clear_login_runtime_state(checked=True)
             self._login_required = True
+            if self._page is not None:
+                try:
+                    page_png = await self._page.screenshot(full_page=True)
+                except Exception:
+                    page_png = None
+                if page_png:
+                    self._login_qr_image_base64 = base64.b64encode(page_png).decode('ascii')
+                    self._login_qr_updated_at = int(time.time())
             return
 
         qr_png = await qr_locator.screenshot()
