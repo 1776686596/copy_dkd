@@ -18,7 +18,12 @@ export interface ResolveWecomWebLoginUiStateParams {
 export interface WecomWebLoginUiState {
   panelState: WecomWebLoginPanelState;
   qrImageBase64: string | null;
+  qrImageSrc: string | null;
   shouldPoll: boolean;
+}
+
+function buildWecomWebLoginImageSrc(imageBase64: string | null): string | null {
+  return imageBase64 ? `data:image/png;base64,${imageBase64}` : null;
 }
 
 export function resolveWecomWebLoginUiState({
@@ -33,6 +38,7 @@ export function resolveWecomWebLoginUiState({
     return {
       panelState: 'disabled',
       qrImageBase64: null,
+      qrImageSrc: null,
       shouldPoll: false,
     };
   }
@@ -41,6 +47,7 @@ export function resolveWecomWebLoginUiState({
     return {
       panelState: 'error',
       qrImageBase64: null,
+      qrImageSrc: null,
       shouldPoll: true,
     };
   }
@@ -49,6 +56,7 @@ export function resolveWecomWebLoginUiState({
     return {
       panelState: 'checking',
       qrImageBase64: null,
+      qrImageSrc: null,
       shouldPoll: true,
     };
   }
@@ -58,6 +66,7 @@ export function resolveWecomWebLoginUiState({
       return {
         panelState: 'qrcode',
         qrImageBase64: loginQrImageBase64,
+        qrImageSrc: buildWecomWebLoginImageSrc(loginQrImageBase64),
         shouldPoll: true,
       };
     }
@@ -65,6 +74,7 @@ export function resolveWecomWebLoginUiState({
     return {
       panelState: 'generating',
       qrImageBase64: null,
+      qrImageSrc: null,
       shouldPoll: true,
     };
   }
@@ -72,6 +82,7 @@ export function resolveWecomWebLoginUiState({
   return {
     panelState: 'ready',
     qrImageBase64: null,
+    qrImageSrc: null,
     shouldPoll: true,
   };
 }

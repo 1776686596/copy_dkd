@@ -63,6 +63,7 @@ import {
   getCategoryLabel,
 } from '@/app/infra/entities/adapter-categories';
 import { resolveWecomWebLoginUiState } from './wecomWebLoginState';
+import { PhotoProvider, PhotoView } from 'react-photo-view';
 
 const getFormSchema = (t: (key: string) => string) =>
   z.object({
@@ -736,18 +737,29 @@ export default function BotForm({
                     </div>
 
                     {wecomWebLoginUiState.panelState === 'qrcode' &&
-                    wecomWebLoginUiState.qrImageBase64 ? (
-                      <div className="flex justify-center rounded-md bg-background p-4">
-                        <img
-                          src={
-                            wecomWebLoginUiState.qrImageBase64
-                              ? `data:image/png;base64,${wecomWebLoginUiState.qrImageBase64}`
-                              : undefined
-                          }
-                          alt="企业微信网页登录二维码"
-                          className="h-56 w-56 max-w-full"
-                        />
-                      </div>
+                    wecomWebLoginUiState.qrImageSrc ? (
+                      <PhotoProvider>
+                        <div className="space-y-2">
+                          <div className="flex justify-center rounded-md bg-background p-4">
+                            <PhotoView src={wecomWebLoginUiState.qrImageSrc}>
+                              <button
+                                type="button"
+                                className="rounded-md transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                title="点击放大登录图"
+                              >
+                                <img
+                                  src={wecomWebLoginUiState.qrImageSrc}
+                                  alt="企业微信网页登录预览图"
+                                  className="h-56 w-56 max-w-full cursor-zoom-in rounded-md object-contain sm:h-72 sm:w-72"
+                                />
+                              </button>
+                            </PhotoView>
+                          </div>
+                          <p className="text-center text-xs text-muted-foreground">
+                            点击图片可放大扫码。
+                          </p>
+                        </div>
+                      </PhotoProvider>
                     ) : wecomWebLoginUiState.panelState === 'error' ? (
                       <p className="text-sm text-muted-foreground">
                         {loginQrLoadError}，系统会继续自动重试。
