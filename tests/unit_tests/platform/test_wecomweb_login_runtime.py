@@ -358,7 +358,6 @@ async def test_wecomweb_client_falls_back_to_system_browser_when_builtin_browser
 ):
     import playwright.async_api as playwright_async_api
 
-    from langbot.libs.wecom_web_page_api import client as wecom_client_module
     from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
 
     fake_page = SimpleNamespace(goto=AsyncMock())
@@ -378,10 +377,11 @@ async def test_wecomweb_client_falls_back_to_system_browser_when_builtin_browser
             return fake_playwright
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeStarter())
+    discovered_browsers = iter([None, "/usr/bin/google-chrome"])
     monkeypatch.setattr(
-        wecom_client_module.shutil,
-        "which",
-        lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None,
+        WecomWebPageClient,
+        "_find_system_browser_executable",
+        staticmethod(lambda: next(discovered_browsers)),
     )
 
     client = WecomWebPageClient(
@@ -401,3 +401,44 @@ async def test_wecomweb_client_falls_back_to_system_browser_when_builtin_browser
         "https://work.weixin.qq.com/kf/",
         wait_until="domcontentloaded",
     )
+
+
+@pytest.mark.asyncio
+async def test_wecomweb_client_prefers_system_browser_and_visible_window_when_available(
+    monkeypatch, tmp_path
+):
+    import playwright.async_api as playwright_async_api
+
+    from langbot.libs.wecom_web_page_api import client as wecom_client_module
+    from langbot.libs.wecom_web_page_api.client import WecomWebPageClient
+
+    fake_page = SimpleNamespace(goto=AsyncMock())
+    fake_context = SimpleNamespace(pages=[fake_page])
+    launch_context = AsyncMock(return_value=fake_context)
+    fake_playwright = SimpleNamespace(
+        chromium=SimpleNamespace(launch_persistent_context=launch_context)
+    )
+
+    class FakeStarter:
+        async def start(self):
+            return fake_playwright
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeStarter())
+    monkeypatch.setattr(
+        wecom_client_module.shutil,
+        "which",
+        lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None,
+    )
+
+    client = WecomWebPageClient(
+        account_label="escort-account",
+        workbench_url="https://work.weixin.qq.com/kf/",
+        storage_state_dir=str(tmp_path / "wecomweb"),
+        headless=True,
+    )
+
+    await client._ensure_browser()
+
+    launch_kwargs = launch_context.await_args.kwargs
+    assert launch_kwargs["executable_path"] == "/usr/bin/google-chrome"
+    assert launch_kwargs["headless"] is False

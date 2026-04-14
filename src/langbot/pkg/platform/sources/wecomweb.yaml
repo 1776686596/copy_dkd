@@ -69,21 +69,21 @@ spec:
         zh_Hans: 后台运行
         zh_Hant: 後台運行
       description:
-        en_US: Run the hosted session without opening a visible browser window
-        zh_Hans: 以后台模式运行托管会话，不弹出可见浏览器窗口
-        zh_Hant: 以後台模式執行託管會話，不彈出可見瀏覽器視窗
+        en_US: Run the hosted session without opening a visible browser window. Visible browser mode is recommended for login safety.
+        zh_Hans: 以后台模式运行托管会话，不弹出可见浏览器窗口。为降低登录异常风险，建议关闭此项。
+        zh_Hant: 以後台模式執行託管會話，不彈出可見瀏覽器視窗。為降低登入異常風險，建議關閉此項。
       type: boolean
       required: false
-      default: true
+      default: false
     - name: browser_executable_path
       label:
         en_US: Browser Executable Path
         zh_Hans: 浏览器可执行文件路径
         zh_Hant: 瀏覽器可執行檔路徑
       description:
-        en_US: Optional system Chrome or Chromium executable path used when Playwright bundled browser is unavailable
-        zh_Hans: 可选，指定系统 Chrome 或 Chromium 可执行文件路径，在 Playwright 自带浏览器不可用时优先使用
-        zh_Hant: 可選，指定系統 Chrome 或 Chromium 可執行檔路徑，在 Playwright 內建瀏覽器不可用時優先使用
+        en_US: Optional system Chrome or Chromium executable path. When left empty, the runtime will try to auto-detect a system browser first.
+        zh_Hans: 可选，指定系统 Chrome 或 Chromium 可执行文件路径。留空时会优先自动探测系统浏览器。
+        zh_Hant: 可選，指定系統 Chrome 或 Chromium 可執行檔路徑。留空時會優先自動偵測系統瀏覽器。
       type: string
       required: false
       default: ""

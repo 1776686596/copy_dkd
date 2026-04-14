@@ -238,7 +238,11 @@ class WecomWebPageClient:
             raise RuntimeError('Playwright 未安装，请先执行 `playwright install chromium`') from exc
 
         self._playwright = await async_playwright().start()
-        launch_kwargs = self._build_launch_kwargs(self.browser_executable_path)
+        resolved_browser = self._resolve_browser_executable_for_launch()
+        launch_kwargs = self._build_launch_kwargs(
+            executable_path=resolved_browser,
+            headless=self._resolve_headless_for_launch(resolved_browser),
+        )
 
         try:
             self._browser_context = await self._playwright.chromium.launch_persistent_context(**launch_kwargs)
@@ -248,16 +252,31 @@ class WecomWebPageClient:
                 raise
 
             await self._log('warning', f'Playwright 内置浏览器不可用，回退到系统浏览器：{fallback_browser}')
-            launch_kwargs = self._build_launch_kwargs(fallback_browser)
+            launch_kwargs = self._build_launch_kwargs(
+                executable_path=fallback_browser,
+                headless=self._resolve_headless_for_launch(fallback_browser),
+            )
             self._browser_context = await self._playwright.chromium.launch_persistent_context(**launch_kwargs)
 
         self._page = self._browser_context.pages[0] if self._browser_context.pages else await self._browser_context.new_page()
         await self._page.goto(self.workbench_url, wait_until='domcontentloaded')
 
-    def _build_launch_kwargs(self, executable_path: str | None = None) -> dict[str, Any]:
+    def _resolve_browser_executable_for_launch(self) -> str | None:
+        if self.browser_executable_path:
+            return self.browser_executable_path
+
+        return self._find_system_browser_executable()
+
+    def _resolve_headless_for_launch(self, executable_path: str | None) -> bool:
+        if executable_path and executable_path != self.browser_executable_path:
+            return False
+
+        return self.headless
+
+    def _build_launch_kwargs(self, *, executable_path: str | None = None, headless: bool | None = None) -> dict[str, Any]:
         launch_kwargs: dict[str, Any] = {
             'user_data_dir': self.storage_state_dir,
-            'headless': self.headless,
+            'headless': self.headless if headless is None else headless,
         }
         if executable_path:
             launch_kwargs['executable_path'] = executable_path

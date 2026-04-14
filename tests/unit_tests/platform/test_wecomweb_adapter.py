@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from pathlib import Path
 
 import pytest
 
@@ -143,6 +144,15 @@ def test_client_from_config_reads_browser_executable_path():
     )
 
     assert client.browser_executable_path == '/usr/bin/google-chrome'
+
+
+def test_wecomweb_manifest_defaults_to_visible_browser_mode():
+    manifest = Path(
+        '/home/daisheng/code/copy_dkd/LangBot/src/langbot/pkg/platform/sources/wecomweb.yaml'
+    ).read_text(encoding='utf-8')
+
+    assert "name: headless" in manifest
+    assert "default: false" in manifest
 
 
 @pytest.mark.asyncio
