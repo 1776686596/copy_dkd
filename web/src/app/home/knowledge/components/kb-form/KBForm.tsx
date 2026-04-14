@@ -166,21 +166,27 @@ export default function KBForm({
         const kb = res.base;
 
         const engineId = kb.knowledge_engine_plugin_id || '';
-        setSelectedEngineId(engineId);
-
-        form.reset({
+        const nextFormValues = {
           name: kb.name,
           description: kb.description,
           emoji: kb.emoji || '📚',
           ragEngineId: engineId,
-        });
+        };
+        const nextConfigSettings = kb.creation_settings || {};
+        const nextRetrievalSettings = kb.retrieval_settings || {};
 
-        setConfigSettings(kb.creation_settings || {});
-        setRetrievalSettings(kb.retrieval_settings || {});
+        setSelectedEngineId(engineId);
+        form.reset(nextFormValues);
+        setConfigSettings(nextConfigSettings);
+        setRetrievalSettings(nextRetrievalSettings);
 
         // 等动态表单初始值回填后再记录快照，避免误判脏状态
         setTimeout(() => {
-          captureSnapshot();
+          savedSnapshotRef.current = JSON.stringify({
+            form: nextFormValues,
+            config: nextConfigSettings,
+            retrieval: nextRetrievalSettings,
+          });
           isInitializing.current = false;
         }, 500);
       } catch (err) {
@@ -188,16 +194,18 @@ export default function KBForm({
         isInitializing.current = false;
       }
     },
-    [form, captureSnapshot],
+    [form],
   );
 
   useEffect(() => {
-    loadRagEngines().then(() => {
-      if (initKbId) {
-        loadKbConfig(initKbId);
-      }
-    });
-  }, [initKbId, loadKbConfig, loadRagEngines]);
+    void loadRagEngines();
+  }, [loadRagEngines]);
+
+  useEffect(() => {
+    if (initKbId) {
+      void loadKbConfig(initKbId);
+    }
+  }, [initKbId, loadKbConfig]);
 
   // 创建模式下自动选中第一个可用知识引擎
   useEffect(() => {
