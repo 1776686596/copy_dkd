@@ -51,12 +51,9 @@ export interface ModelItemProps {
 
 export interface ProviderCardProps {
   provider: ModelProvider;
-  isLangBotModels?: boolean;
   isExpanded: boolean;
   isLoading: boolean;
   models?: ProviderModels;
-  accountType: 'local' | 'space';
-  spaceCredits: number | null;
   requesterNameList: { label: string; value: string }[];
   // Popover states
   addModelPopoverOpen: string | null;
@@ -66,7 +63,6 @@ export interface ProviderCardProps {
   onToggle: () => void;
   onEditProvider: () => void;
   onDeleteProvider: () => void;
-  onSpaceLogin: () => void;
   onOpenAddModel: () => void;
   onCloseAddModel: () => void;
   onAddModel: (
@@ -98,5 +94,3 @@ export interface ProviderCardProps {
   testResult: TestResult | null;
   onResetTestResult: () => void;
 }
-
-export const LANGBOT_MODELS_PROVIDER_REQUESTER = 'space-chat-completions';

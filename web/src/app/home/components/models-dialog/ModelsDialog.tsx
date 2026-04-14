@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Boxes } from 'lucide-react';
-import { httpClient, systemInfo } from '@/app/infra/http/HttpClient';
+import { httpClient } from '@/app/infra/http/HttpClient';
 import { ModelProvider } from '@/app/infra/entities/api';
 import {
   Dialog,
@@ -13,14 +13,9 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import ProviderForm from './component/provider-form/ProviderForm';
 import { ProviderCard } from './components';
-import {
-  ExtraArg,
-  ModelType,
-  TestResult,
-  ProviderModels,
-  LANGBOT_MODELS_PROVIDER_REQUESTER,
-} from './types';
+import { ExtraArg, ModelType, TestResult, ProviderModels } from './types';
 import { CustomApiError } from '@/app/infra/entities/common';
+import { getVisibleProviders } from './visibleProviders.js';
 
 interface ModelsDialogProps {
   open: boolean;
@@ -48,10 +43,6 @@ export default function ModelsDialog({
   const { t } = useTranslation();
 
   const [providers, setProviders] = useState<ModelProvider[]>([]);
-  const [accountType, setAccountType] = useState<'local' | 'space'>('local');
-  const [spaceCredits, setSpaceCredits] = useState<number | null>(null);
-
-  // Expanded providers and their models
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(
     new Set(),
   );
@@ -84,35 +75,12 @@ export default function ModelsDialog({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
-  // Track if providers have been loaded initially
-  const [providersLoaded, setProvidersLoaded] = useState(false);
-
-  // Separate LangBot Models provider (hide when models service is disabled)
-  const langbotProvider = systemInfo.disable_models_service
-    ? undefined
-    : providers.find((p) => p.requester === LANGBOT_MODELS_PROVIDER_REQUESTER);
-  const otherProviders = providers.filter(
-    (p) => p.requester !== LANGBOT_MODELS_PROVIDER_REQUESTER,
-  );
-
-  const loadUserInfo = useCallback(async () => {
-    try {
-      const userInfo = await httpClient.getUserInfo();
-      setAccountType(userInfo.account_type);
-      if (userInfo.account_type === 'space') {
-        const creditsInfo = await httpClient.getSpaceCredits();
-        setSpaceCredits(creditsInfo.credits);
-      }
-    } catch {
-      setAccountType('local');
-    }
-  }, []);
+  const visibleProviders: ModelProvider[] = getVisibleProviders(providers);
 
   const loadProviders = useCallback(async () => {
     try {
       const resp = await httpClient.getModelProviders();
       setProviders(resp.providers);
-      setProvidersLoaded(true);
     } catch (err) {
       console.error('Failed to load providers', err);
       toast.error(t('models.loadError'));
@@ -155,29 +123,9 @@ export default function ModelsDialog({
 
   useEffect(() => {
     if (open) {
-      void loadUserInfo();
       void loadProviders();
     }
-  }, [loadProviders, loadUserInfo, open]);
-
-  // Auto-expand LangBot Models when no external providers exist
-  useEffect(() => {
-    if (providersLoaded && langbotProvider && otherProviders.length === 0) {
-      if (!expandedProviders.has(langbotProvider.uuid)) {
-        setExpandedProviders(new Set([langbotProvider.uuid]));
-        if (!providerModels[langbotProvider.uuid]) {
-          void loadProviderModels(langbotProvider.uuid);
-        }
-      }
-    }
-  }, [
-    expandedProviders,
-    langbotProvider,
-    loadProviderModels,
-    otherProviders.length,
-    providerModels,
-    providersLoaded,
-  ]);
+  }, [loadProviders, open]);
 
   function toggleProvider(providerUuid: string) {
     setExpandedProviders((prev) => {
@@ -211,25 +159,6 @@ export default function ModelsDialog({
       loadProviders();
     } catch (err) {
       toast.error(t('models.providerDeleteError') + (err as Error).message);
-    }
-  }
-
-  async function handleSpaceLogin() {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error(t('common.error'));
-        return;
-      }
-      const currentOrigin = window.location.origin;
-      const redirectUri = `${currentOrigin}/auth/space/callback?mode=bind`;
-      const response = await httpClient.getSpaceAuthorizeUrl(
-        redirectUri,
-        token,
-      );
-      window.location.href = response.authorize_url;
-    } catch {
-      toast.error(t('common.spaceLoginFailed'));
     }
   }
 
@@ -388,27 +317,20 @@ export default function ModelsDialog({
     expandedProviders.forEach((uuid) => loadProviderModels(uuid));
   }
 
-  function renderProviderCard(
-    provider: ModelProvider,
-    isLangBotModels: boolean = false,
-  ) {
+  function renderProviderCard(provider: ModelProvider) {
     return (
       <ProviderCard
         key={provider.uuid}
         provider={provider}
-        isLangBotModels={isLangBotModels}
         isExpanded={expandedProviders.has(provider.uuid)}
         isLoading={loadingProviders.has(provider.uuid)}
         models={providerModels[provider.uuid]}
-        accountType={accountType}
-        spaceCredits={spaceCredits}
         addModelPopoverOpen={addModelPopoverOpen}
         editModelPopoverOpen={editModelPopoverOpen}
         deleteConfirmOpen={deleteConfirmOpen}
         onToggle={() => toggleProvider(provider.uuid)}
         onEditProvider={() => handleEditProvider(provider.uuid)}
         onDeleteProvider={() => handleDeleteProvider(provider.uuid)}
-        onSpaceLogin={handleSpaceLogin}
         onOpenAddModel={() => setAddModelPopoverOpen(provider.uuid)}
         onCloseAddModel={() => setAddModelPopoverOpen(null)}
         onAddModel={(modelType, name, abilities, extraArgs) =>
@@ -457,19 +379,14 @@ export default function ModelsDialog({
           </DialogHeader>
 
           <div className="flex-1 overflow-auto px-6 pb-6 mt-0">
-            {/* LangBot Models Card */}
-            {langbotProvider && renderProviderCard(langbotProvider, true)}
-
             {/* Add Provider Button */}
             <div className="mb-3 flex justify-between items-center sticky top-0 bg-background py-2 z-10">
               <span className="text-sm text-muted-foreground">
-                {otherProviders.length === 0
-                  ? t(
-                      systemInfo.disable_models_service
-                        ? 'models.addProviderHintSimple'
-                        : 'models.addProviderHint',
-                    )
-                  : t('models.providerCount', { count: otherProviders.length })}
+                {visibleProviders.length === 0
+                  ? t('models.addProviderHintSimple')
+                  : t('models.providerCount', {
+                      count: visibleProviders.length,
+                    })}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -484,13 +401,13 @@ export default function ModelsDialog({
             </div>
 
             {/* Provider List */}
-            {otherProviders.length === 0 ? (
+            {visibleProviders.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Boxes className="h-12 w-12 mb-3 opacity-50" />
                 <p className="text-sm">{t('models.noProviders')}</p>
               </div>
             ) : (
-              otherProviders.map((p) => renderProviderCard(p))
+              visibleProviders.map((provider) => renderProviderCard(provider))
             )}
           </div>
         </DialogContent>

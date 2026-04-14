@@ -1,14 +1,6 @@
 import { useState } from 'react';
-import {
-  Plus,
-  Cloud,
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  Settings,
-  LogIn,
-} from 'lucide-react';
-import { httpClient, systemInfo } from '@/app/infra/http/HttpClient';
+import { ChevronDown, ChevronRight, Trash2, Settings } from 'lucide-react';
+import { httpClient } from '@/app/infra/http/HttpClient';
 import { ModelProvider } from '@/app/infra/entities/api';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,16 +19,12 @@ import { useTranslation } from 'react-i18next';
 import { ExtraArg, ModelType, TestResult, ProviderModels } from '../types';
 import ModelItem from './ModelItem';
 import AddModelPopover from './AddModelPopover';
-import { getProviderDisplayInfo } from './langbotProviderDisplay.js';
 
 interface ProviderCardProps {
   provider: ModelProvider;
-  isLangBotModels?: boolean;
   isExpanded: boolean;
   isLoading: boolean;
   models?: ProviderModels;
-  accountType: 'local' | 'space';
-  spaceCredits: number | null;
   // Popover states
   addModelPopoverOpen: string | null;
   editModelPopoverOpen: string | null;
@@ -45,7 +33,6 @@ interface ProviderCardProps {
   onToggle: () => void;
   onEditProvider: () => void;
   onDeleteProvider: () => void;
-  onSpaceLogin: () => void;
   onOpenAddModel: () => void;
   onCloseAddModel: () => void;
   onAddModel: (
@@ -80,19 +67,15 @@ interface ProviderCardProps {
 
 export default function ProviderCard({
   provider,
-  isLangBotModels = false,
   isExpanded,
   isLoading,
   models,
-  accountType,
-  spaceCredits,
   addModelPopoverOpen,
   editModelPopoverOpen,
   deleteConfirmOpen,
   onToggle,
   onEditProvider,
   onDeleteProvider,
-  onSpaceLogin,
   onOpenAddModel,
   onCloseAddModel,
   onAddModel,
@@ -111,21 +94,14 @@ export default function ProviderCard({
   const { t } = useTranslation();
   const [deleteProviderConfirmOpen, setDeleteProviderConfirmOpen] =
     useState(false);
-  const displayInfo = getProviderDisplayInfo({
-    isLangBotModels,
-    providerName: provider.name,
-    baseUrl: provider.base_url,
-    apiKeys: provider.api_keys,
-    genericTitle: t('models.langbotModels'),
-    genericDescription: t('models.langbotModelsDescription'),
-  });
-
   const canDelete =
-    !isLangBotModels &&
-    (provider.llm_count || 0) === 0 &&
-    (provider.embedding_count || 0) === 0;
+    (provider.llm_count || 0) === 0 && (provider.embedding_count || 0) === 0;
   const totalModels =
     (provider.llm_count || 0) + (provider.embedding_count || 0);
+  const maskedApiKey =
+    provider.api_keys?.length > 0
+      ? `${provider.api_keys[0].slice(0, 4)}...${provider.api_keys[0].slice(-4)}`
+      : null;
 
   return (
     <Card className="mb-2">
@@ -133,135 +109,85 @@ export default function ProviderCard({
         <CardHeader className="py-0 px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1">
-              {isLangBotModels ? (
-                <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                  <Cloud className="h-4 w-4 text-muted-foreground" />
-                </div>
-              ) : (
-                <img
-                  src={httpClient.getProviderRequesterIconURL(
-                    provider.requester,
-                  )}
-                  alt={provider.name}
-                  className="h-9 w-9 rounded-lg"
-                />
-              )}
+              <img
+                src={httpClient.getProviderRequesterIconURL(provider.requester)}
+                alt={provider.name}
+                className="h-9 w-9 rounded-lg"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-base">
-                    {displayInfo.title}
-                  </CardTitle>
+                  <CardTitle className="text-base">{provider.name}</CardTitle>
                   <Badge variant="outline" className="text-xs">
                     {t('models.modelsCount', { count: totalModels })}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
-                  {displayInfo.subtitle}
+                  {provider.base_url}
+                  {provider.base_url && maskedApiKey && ' · '}
+                  {maskedApiKey}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1 ml-2">
-              {isLangBotModels && accountType !== 'space' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSpaceLogin();
-                  }}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditProvider();
+                }}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              {canDelete && (
+                <Popover
+                  open={deleteProviderConfirmOpen}
+                  onOpenChange={setDeleteProviderConfirmOpen}
                 >
-                  <LogIn className="h-4 w-4 mr-1" />
-                  {t('models.loginWithSpace')}
-                </Button>
-              )}
-              {isLangBotModels &&
-                accountType === 'space' &&
-                spaceCredits !== null && (
-                  <div className="flex items-center gap-1 border rounded-md px-2 h-8 text-sm mr-2">
-                    <span>
-                      {(spaceCredits / 5000).toFixed(2)} {t('models.credits')}
-                    </span>
+                  <PopoverTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5"
+                      className="h-8 w-8"
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.open(
-                          `${systemInfo.cloud_service_url}/profile?tab=billing`,
-                          '_blank',
-                        );
                       }}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
-                  </div>
-                )}
-              {!isLangBotModels && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditProvider();
-                    }}
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-64"
+                    align="end"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                  {canDelete && (
-                    <Popover
-                      open={deleteProviderConfirmOpen}
-                      onOpenChange={setDeleteProviderConfirmOpen}
-                    >
-                      <PopoverTrigger asChild>
+                    <div className="space-y-3">
+                      <p className="text-sm">
+                        {t('models.deleteProviderConfirmation')}
+                      </p>
+                      <div className="flex gap-2 justify-end">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeleteProviderConfirmOpen(false)}
+                        >
+                          {t('common.cancel')}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            onDeleteProvider();
+                            setDeleteProviderConfirmOpen(false);
                           }}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          {t('common.delete')}
                         </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className="w-64"
-                        align="end"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="space-y-3">
-                          <p className="text-sm">
-                            {t('models.deleteProviderConfirmation')}
-                          </p>
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                setDeleteProviderConfirmOpen(false)
-                              }
-                            >
-                              {t('common.cancel')}
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => {
-                                onDeleteProvider();
-                                setDeleteProviderConfirmOpen(false);
-                              }}
-                            >
-                              {t('common.delete')}
-                            </Button>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
           </div>
@@ -282,19 +208,17 @@ export default function ProviderCard({
             ) : (
               <div />
             )}
-            {!isLangBotModels && (
-              <AddModelPopover
-                isOpen={addModelPopoverOpen === provider.uuid}
-                onOpen={onOpenAddModel}
-                onClose={onCloseAddModel}
-                onAddModel={onAddModel}
-                onTestModel={onTestModel}
-                isSubmitting={isSubmitting}
-                isTesting={isTesting}
-                testResult={testResult}
-                onResetTestResult={onResetTestResult}
-              />
-            )}
+            <AddModelPopover
+              isOpen={addModelPopoverOpen === provider.uuid}
+              onOpen={onOpenAddModel}
+              onClose={onCloseAddModel}
+              onAddModel={onAddModel}
+              onTestModel={onTestModel}
+              isSubmitting={isSubmitting}
+              isTesting={isTesting}
+              testResult={testResult}
+              onResetTestResult={onResetTestResult}
+            />
           </div>
         </CardHeader>
         <CollapsibleContent>
@@ -310,7 +234,7 @@ export default function ProviderCard({
                     key={model.uuid}
                     model={model}
                     modelType="llm"
-                    isLangBotModels={isLangBotModels}
+                    isLangBotModels={false}
                     editModelPopoverOpen={editModelPopoverOpen}
                     deleteConfirmOpen={deleteConfirmOpen}
                     onOpenEditModel={onOpenEditModel}
@@ -341,7 +265,7 @@ export default function ProviderCard({
                     key={model.uuid}
                     model={model}
                     modelType="embedding"
-                    isLangBotModels={isLangBotModels}
+                    isLangBotModels={false}
                     editModelPopoverOpen={editModelPopoverOpen}
                     deleteConfirmOpen={deleteConfirmOpen}
                     onOpenEditModel={onOpenEditModel}
