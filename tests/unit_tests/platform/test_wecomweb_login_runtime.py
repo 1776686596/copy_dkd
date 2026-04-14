@@ -24,6 +24,7 @@ async def test_wecomweb_client_caches_login_qr_runtime_state(monkeypatch):
     await client._show_login_qr()
 
     assert client.get_login_runtime_state() == {
+        "login_state_checked": True,
         "login_required": True,
         "login_qr_image_base64": "ZmFrZS1xci1wbmc=",
         "login_qr_updated_at": 1710000000,
@@ -79,6 +80,7 @@ async def test_get_runtime_bot_info_includes_wecomweb_login_runtime_state():
                             bot_account_id="escort-account",
                             bot=SimpleNamespace(
                                 get_login_runtime_state=lambda: {
+                                    "login_state_checked": True,
                                     "login_required": True,
                                     "login_qr_image_base64": "cached-qr",
                                     "login_qr_updated_at": 1710000000,
@@ -105,6 +107,7 @@ async def test_get_runtime_bot_info_includes_wecomweb_login_runtime_state():
         "webhook_url": None,
         "webhook_full_url": None,
         "extra_webhook_full_url": None,
+        "login_state_checked": True,
         "login_required": True,
         "login_qr_image_base64": "cached-qr",
         "login_qr_updated_at": 1710000000,
@@ -134,6 +137,7 @@ async def test_get_runtime_bot_info_returns_wecomweb_login_defaults_without_runt
         "webhook_url": None,
         "webhook_full_url": None,
         "extra_webhook_full_url": None,
+        "login_state_checked": False,
         "login_required": False,
         "login_qr_image_base64": None,
         "login_qr_updated_at": None,
@@ -153,6 +157,7 @@ async def test_get_runtime_bot_info_does_not_expose_wecomweb_login_fields_to_oth
                             bot_account_id="adapter-account",
                             bot=SimpleNamespace(
                                 get_login_runtime_state=lambda: {
+                                    "login_state_checked": True,
                                     "login_required": True,
                                     "login_qr_image_base64": "cached-qr",
                                     "login_qr_updated_at": 1710000000,
@@ -215,10 +220,53 @@ async def test_wecomweb_client_run_forever_clears_cached_login_state_after_login
     await client.run_forever()
 
     assert client.get_login_runtime_state() == {
+        "login_state_checked": True,
         "login_required": False,
         "login_qr_image_base64": None,
         "login_qr_updated_at": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_bot_service_create_bot_runs_enabled_runtime_bot(monkeypatch):
+    from langbot.pkg.api.http.service.bot import BotService
+
+    runtime_bot = SimpleNamespace(enable=True, run=AsyncMock())
+    load_bot = AsyncMock(return_value=runtime_bot)
+    execute_async = AsyncMock(
+        side_effect=[
+            SimpleNamespace(first=lambda: None),
+            None,
+        ]
+    )
+    monkeypatch.setattr("langbot.pkg.api.http.service.bot.uuid.uuid4", lambda: "bot-uuid")
+
+    service = BotService(
+        SimpleNamespace(
+            persistence_mgr=SimpleNamespace(
+                execute_async=execute_async,
+                serialize_model=lambda *_args, **_kwargs: {"uuid": "bot-uuid"},
+            ),
+            platform_mgr=SimpleNamespace(load_bot=load_bot),
+            instance_config=SimpleNamespace(data={"system": {}}),
+        )
+    )
+    service.get_bots = AsyncMock(return_value=[])
+    service.get_bot = AsyncMock(return_value={"uuid": "bot-uuid", "enable": True})
+
+    bot_uuid = await service.create_bot(
+        {
+            "name": "bot",
+            "description": "",
+            "adapter": "wecomweb",
+            "adapter_config": {"account_label": "a", "workbench_url": "u", "storage_state_dir": "d"},
+            "enable": True,
+        }
+    )
+
+    assert bot_uuid == "bot-uuid"
+    load_bot.assert_awaited_once()
+    runtime_bot.run.assert_awaited_once()
 
 
 @pytest.mark.asyncio

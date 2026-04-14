@@ -54,6 +54,7 @@ class BotService:
 
         adapter_runtime_values = {}
         if persistence_bot['adapter'] == 'wecomweb':
+            adapter_runtime_values['login_state_checked'] = False
             adapter_runtime_values['login_required'] = False
             adapter_runtime_values['login_qr_image_base64'] = None
             adapter_runtime_values['login_qr_updated_at'] = None
@@ -119,7 +120,9 @@ class BotService:
 
         bot = await self.get_bot(bot_data['uuid'])
 
-        await self.ap.platform_mgr.load_bot(bot)
+        runtime_bot = await self.ap.platform_mgr.load_bot(bot)
+        if runtime_bot.enable:
+            await runtime_bot.run()
 
         return bot_data['uuid']
 

@@ -150,8 +150,10 @@ export default function BotForm({
   const [, setIsLoading] = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState<string>('');
   const [extraWebhookUrl, setExtraWebhookUrl] = useState<string>('');
+  const [wecomWebBotEnabled, setWecomWebBotEnabled] = useState<boolean>(false);
   const [loginRequired, setLoginRequired] = useState<boolean>(false);
   const [loginStateLoaded, setLoginStateLoaded] = useState<boolean>(false);
+  const [loginStateChecked, setLoginStateChecked] = useState<boolean>(false);
   const [loginQrImageBase64, setLoginQrImageBase64] = useState<string | null>(
     null,
   );
@@ -196,9 +198,13 @@ export default function BotForm({
           return;
         }
         const runtimeValues = res.bot.adapter_runtime_values;
+        setWecomWebBotEnabled(res.bot.enable ?? false);
+        const nextLoginStateChecked =
+          runtimeValues?.login_state_checked === true;
         const nextLoginRequired = runtimeValues?.login_required === true;
 
         setLoginStateLoaded(true);
+        setLoginStateChecked(nextLoginStateChecked);
         setLoginRequired(nextLoginRequired);
         setLoginQrLoadError(null);
         setLoginQrImageBase64(
@@ -221,7 +227,9 @@ export default function BotForm({
     if (!initBotId || currentAdapter !== 'wecomweb') {
       loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
+      setWecomWebBotEnabled(false);
       setLoginStateLoaded(false);
+      setLoginStateChecked(false);
       setLoginRequired(false);
       setLoginQrImageBase64(null);
       setLoginQrLoadError(null);
@@ -253,6 +261,8 @@ export default function BotForm({
     initBotId && currentAdapter === 'wecomweb'
       ? resolveWecomWebLoginUiState({
           hasLoadedState: loginStateLoaded,
+          botEnabled: wecomWebBotEnabled,
+          loginStateChecked,
           loginRequired,
           loginQrImageBase64,
           loginQrLoadError,
@@ -452,6 +462,7 @@ export default function BotForm({
         description: form.getValues().description ?? '',
         adapter: form.getValues().adapter,
         adapter_config: form.getValues().adapter_config,
+        enable: form.getValues().enable,
       };
       httpClient
         .createBot(newBot)
@@ -740,6 +751,11 @@ export default function BotForm({
                     ) : wecomWebLoginUiState.panelState === 'error' ? (
                       <p className="text-sm text-muted-foreground">
                         {loginQrLoadError}，系统会继续自动重试。
+                      </p>
+                    ) : wecomWebLoginUiState.panelState === 'disabled' ? (
+                      <p className="text-sm text-muted-foreground">
+                        当前 Bot
+                        未启用；启用后才会开始检查企业微信网页登录状态。
                       </p>
                     ) : wecomWebLoginUiState.panelState === 'checking' ? (
                       <p className="text-sm text-muted-foreground">

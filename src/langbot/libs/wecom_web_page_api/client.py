@@ -96,6 +96,7 @@ class WecomWebPageClient:
         self._conversation_keys: dict[str, str] = {}
         self._recent_outbound_texts: dict[str, str] = {}
         self._last_qr_hash: str | None = None
+        self._login_state_checked = False
         self._login_required = False
         self._login_qr_image_base64: str | None = None
         self._login_qr_updated_at: int | None = None
@@ -127,12 +128,15 @@ class WecomWebPageClient:
 
     def get_login_runtime_state(self) -> dict[str, Any]:
         return {
+            'login_state_checked': self._login_state_checked,
             'login_required': self._login_required,
             'login_qr_image_base64': self._login_qr_image_base64,
             'login_qr_updated_at': self._login_qr_updated_at,
         }
 
-    def _clear_login_runtime_state(self) -> None:
+    def _clear_login_runtime_state(self, *, checked: bool | None = None) -> None:
+        if checked is not None:
+            self._login_state_checked = checked
         self._login_required = False
         self._login_qr_image_base64 = None
         self._login_qr_updated_at = None
@@ -179,7 +183,7 @@ class WecomWebPageClient:
                     await asyncio.sleep(self.poll_interval_seconds)
                     continue
                 self._last_qr_hash = None
-                self._clear_login_runtime_state()
+                self._clear_login_runtime_state(checked=True)
 
                 await self._drain_send_queue()
                 await self._poll_once()
@@ -275,6 +279,7 @@ class WecomWebPageClient:
             return
 
         qr_png = await qr_locator.screenshot()
+        self._login_state_checked = True
         self._login_required = True
         self._login_qr_image_base64 = base64.b64encode(qr_png).decode('ascii')
         self._login_qr_updated_at = int(time.time())
