@@ -274,6 +274,23 @@ const enUS = {
     noBotsTitle: 'No service desk bot is available yet',
     noBotsDescription:
       'Create a bot with the `wecomcs` or `lark` adapter first, then the service desk can load sessions and rules.',
+    channels: {
+      wecomcs: 'WeCom Service',
+      lark: 'Lark DM',
+    },
+    overview: {
+      title: 'Channel Overview',
+      description:
+        'Pick a staffed bot first, then enter the workspace to handle sessions, rules, and quick materials.',
+      botCount: 'Bots',
+      channelCount: 'Channels',
+      enterWorkbench: 'Open Workspace',
+      openRules: 'Rules',
+      openMaterials: 'Materials',
+      ruleEnabled: 'Rules enabled',
+      ruleDisabled: 'Rules disabled',
+      backToOverview: 'Back to overview',
+    },
     tabs: {
       workbench: 'Workbench',
       botConfig: 'Bot Rules',

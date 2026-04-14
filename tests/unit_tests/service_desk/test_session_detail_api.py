@@ -19,6 +19,25 @@ class _FakeScalarResult:
         return self._value
 
 
+class _FakeSessionScalarRows:
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class _FakeSessionQueryResult:
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row['session_id']
+
+    def scalars(self):
+        return _FakeSessionScalarRows(self._row)
+
+
 @pytest.mark.asyncio
 async def test_list_workbench_sessions_supports_keyword_search():
     from langbot.pkg.api.http.service.service_desk import ServiceDeskService
@@ -129,3 +148,34 @@ async def test_get_session_detail_returns_messages_and_overlay():
     assert detail['messages']
     assert 'handoff_reason' in detail['session']
     assert detail['bot']['uuid'] == 'bot-1'
+
+
+@pytest.mark.asyncio
+async def test_get_session_detail_uses_scalar_row_when_result_first_is_primary_key():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    session_row = {
+        'session_id': 'person_ou_demo_1',
+        'bot_uuid': 'bot-1',
+        'pipeline_uuid': 'pipeline-1',
+        'handoff_reason': None,
+    }
+
+    ap = Mock()
+    ap.persistence_mgr.execute_async = AsyncMock(
+        return_value=_FakeSessionQueryResult(session_row)
+    )
+    ap.persistence_mgr.serialize_model = Mock(side_effect=lambda _model, row: row)
+    ap.monitoring_service.get_messages = AsyncMock(return_value=([], 0))
+    ap.platform_mgr.get_bot_by_uuid = AsyncMock(
+        return_value=SimpleNamespace(bot_entity=SimpleNamespace(name='客服机器人'))
+    )
+
+    service = ServiceDeskService(ap)
+
+    detail = await service.get_session_detail('person_ou_demo_1')
+
+    assert detail['session']['session_id'] == 'person_ou_demo_1'
+    assert detail['bot']['name'] == '客服机器人'

@@ -262,6 +262,23 @@ const zhHans = {
     noBotsTitle: '还没有可用的客服渠道机器人',
     noBotsDescription:
       '请先在机器人页创建并配置 `wecomcs` 或 `lark` 适配器，客服台才会展示会话和规则能力。',
+    channels: {
+      wecomcs: '企微客服',
+      lark: '飞书私聊',
+    },
+    overview: {
+      title: '渠道总览',
+      description:
+        '先选择要值守的客服号，再进入工作台处理会话、规则和素材。',
+      botCount: '客服号数量',
+      channelCount: '接入渠道数',
+      enterWorkbench: '进入工作台',
+      openRules: '规则配置',
+      openMaterials: '素材库',
+      ruleEnabled: '规则已启用',
+      ruleDisabled: '规则未启用',
+      backToOverview: '返回总览',
+    },
     tabs: {
       workbench: '工作台',
       botConfig: '客服号规则',

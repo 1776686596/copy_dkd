@@ -160,7 +160,18 @@ class ServiceDeskService:
                 persistence_service_desk.ServiceDeskSession.session_id == session_id
             )
         )
-        return self._unwrap_model(result.first())
+        row = self._unwrap_model(result.first())
+        if row is not None and not isinstance(row, str):
+            return row
+
+        if isinstance(row, str) and hasattr(result, 'scalars'):
+            scalar_rows = result.scalars()
+            if hasattr(scalar_rows, 'first'):
+                scalar_row = scalar_rows.first()
+                if scalar_row is not None:
+                    return scalar_row
+
+        return row
 
     async def _update_session_state(self, session_id: str, **values) -> None:
         await self.ap.persistence_mgr.execute_async(

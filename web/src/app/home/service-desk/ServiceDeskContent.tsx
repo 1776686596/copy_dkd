@@ -6,8 +6,11 @@ import {
   ServiceDeskSession,
 } from '@/app/infra/entities/api';
 import { httpClient } from '@/app/infra/http/HttpClient';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -22,7 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Bot as BotIcon,
+  ArrowLeft,
   Clock3,
   Headset,
   MessageSquareReply,
@@ -36,6 +39,7 @@ import SessionFilters from './components/SessionFilters';
 
 type ServiceDeskBot = Bot & { uuid: string };
 type ServiceDeskQueueFilter = ServiceDeskSession['queue_status'] | 'all';
+type ServiceDeskViewMode = 'overview' | 'workspace';
 
 const QUEUE_FILTERS: ServiceDeskQueueFilter[] = [
   'all',
@@ -49,8 +53,23 @@ function isServiceDeskBot(bot: Bot): bot is ServiceDeskBot {
   return Boolean(bot.uuid) && ['wecomcs', 'lark'].includes(bot.adapter);
 }
 
+function getChannelLabel(adapter: string, t: ReturnType<typeof useTranslation>['t']) {
+  if (adapter === 'lark') {
+    return t('serviceDesk.channels.lark');
+  }
+  return t('serviceDesk.channels.wecomcs');
+}
+
+function getChannelBadgeClass(adapter: string) {
+  if (adapter === 'lark') {
+    return 'border-sky-200 bg-sky-50 text-sky-700';
+  }
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
 export default function ServiceDeskContent() {
   const { t } = useTranslation();
+  const [viewMode, setViewMode] = useState<ServiceDeskViewMode>('overview');
   const [activeTab, setActiveTab] = useState('workbench');
   const [bots, setBots] = useState<ServiceDeskBot[]>([]);
   const [configs, setConfigs] = useState<ServiceDeskBotConfig[]>([]);
@@ -173,6 +192,20 @@ export default function ServiceDeskContent() {
     );
   }, [sessions]);
 
+  const distinctChannelCount = useMemo(
+    () => new Set(bots.map((bot) => bot.adapter)).size,
+    [bots],
+  );
+
+  const openWorkspace = useCallback(
+    (botUuid: string, tab: string = 'workbench') => {
+      setSelectedBotUuid(botUuid);
+      setActiveTab(tab);
+      setViewMode('workspace');
+    },
+    [],
+  );
+
   if (bootstrapping) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -196,32 +229,170 @@ export default function ServiceDeskContent() {
     );
   }
 
+  if (viewMode === 'overview') {
+    return (
+      <div className="flex h-full flex-col gap-6">
+        <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <Card className="rounded-[28px] border-border/70 bg-[linear-gradient(165deg,rgba(255,255,255,0.98),rgba(244,247,251,0.92))] shadow-sm">
+            <CardHeader className="space-y-4">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Headset className="size-3.5 text-primary" />
+                {t('serviceDesk.title')}
+              </div>
+              <div className="space-y-2">
+                <CardTitle className="text-2xl">
+                  {t('serviceDesk.overview.title')}
+                </CardTitle>
+                <CardDescription className="text-sm leading-6">
+                  {t('serviceDesk.overview.description')}
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.overview.botCount')}
+                </div>
+                <div className="mt-1 text-2xl font-semibold">{bots.length}</div>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.overview.channelCount')}
+                </div>
+                <div className="mt-1 text-2xl font-semibold">
+                  {distinctChannelCount}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {bots.map((bot) => {
+              const botConfig =
+                configs.find((item) => item.bot_uuid === bot.uuid) ?? null;
+              const channelLabel = getChannelLabel(bot.adapter, t);
+              const channelBadgeClass = getChannelBadgeClass(bot.adapter);
+
+              return (
+                <Card
+                  key={bot.uuid}
+                  className="rounded-[28px] border-border/70 bg-background shadow-sm transition-colors hover:border-primary/40"
+                >
+                  <CardHeader className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <Badge
+                        variant="outline"
+                        className={channelBadgeClass}
+                      >
+                        {channelLabel}
+                      </Badge>
+                      <Badge variant="secondary">
+                        {botConfig?.enabled
+                          ? t('serviceDesk.overview.ruleEnabled')
+                          : t('serviceDesk.overview.ruleDisabled')}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <CardTitle className="text-lg">{bot.name}</CardTitle>
+                      <CardDescription className="line-clamp-2 min-h-10 text-sm leading-6">
+                        {bot.description || t('serviceDesk.heroDescription')}
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-3 text-sm">
+                      <div className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3">
+                        <div className="text-xs text-muted-foreground">
+                          {t('serviceDesk.config.adapterType')}
+                        </div>
+                        <div className="mt-1 font-medium">{channelLabel}</div>
+                      </div>
+                      <div className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3">
+                        <div className="text-xs text-muted-foreground">
+                          {t('serviceDesk.config.pipelineBinding')}
+                        </div>
+                        <div className="mt-1 break-all font-medium">
+                          {bot.use_pipeline_name ||
+                            bot.use_pipeline_uuid ||
+                            t('common.none')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => openWorkspace(bot.uuid, 'workbench')}
+                      >
+                        {t('serviceDesk.overview.enterWorkbench')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => openWorkspace(bot.uuid, 'bot-config')}
+                      >
+                        {t('serviceDesk.overview.openRules')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => openWorkspace(bot.uuid, 'materials')}
+                      >
+                        {t('serviceDesk.overview.openMaterials')}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const selectedChannelLabel = selectedBot
+    ? getChannelLabel(selectedBot.adapter, t)
+    : t('common.none');
+
   return (
     <div className="flex h-full flex-col gap-4">
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-[linear-gradient(135deg,rgba(34,136,238,0.08),rgba(255,255,255,0.98)_42%,rgba(16,185,129,0.08))] px-6 py-6">
-        <div className="absolute inset-y-0 right-0 w-56 bg-[radial-gradient(circle_at_top_right,rgba(34,136,238,0.16),transparent_68%)]" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
-              <Headset className="size-3.5 text-primary" />
-              {t('serviceDesk.wecomOnlyHint')}
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {t('serviceDesk.heroTitle')}
-              </h1>
-              <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                {t('serviceDesk.heroDescription')}
+      <section className="rounded-[28px] border border-border/70 bg-background px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto px-0 text-muted-foreground"
+              onClick={() => setViewMode('overview')}
+            >
+              <ArrowLeft className="size-4" />
+              {t('serviceDesk.overview.backToOverview')}
+            </Button>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {selectedBot?.name ?? t('common.none')}
+                </h1>
+                <Badge
+                  variant="outline"
+                  className={getChannelBadgeClass(selectedBot?.adapter || '')}
+                >
+                  {selectedChannelLabel}
+                </Badge>
+              </div>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                {selectedBot?.description || t('serviceDesk.heroDescription')}
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-3 lg:min-w-[240px]">
+          <div className="flex min-w-[220px] flex-col gap-2">
             <span className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
               {t('serviceDesk.workbench.selectBot')}
             </span>
             <Select value={selectedBotUuid} onValueChange={setSelectedBotUuid}>
-              <SelectTrigger className="w-full min-w-[220px] bg-background/90">
+              <SelectTrigger className="w-full bg-background">
                 <SelectValue
                   placeholder={t('serviceDesk.workbench.selectBot')}
                 />
@@ -237,39 +408,28 @@ export default function ServiceDeskContent() {
           </div>
         </div>
 
-        <div className="relative mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-border/60 bg-background/82 p-4 shadow-sm backdrop-blur">
-            <div className="text-xs text-muted-foreground">
-              {t('serviceDesk.summary.selectedBot')}
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-base font-semibold">
-              <BotIcon className="size-4 text-primary" />
-              <span className="truncate">
-                {selectedBot?.name ?? t('common.none')}
-              </span>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-background/82 p-4 shadow-sm backdrop-blur">
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
             <div className="text-xs text-muted-foreground">
               {t('serviceDesk.summary.queueTotal')}
             </div>
-            <div className="mt-2 text-2xl font-semibold">{sessionsTotal}</div>
+            <div className="mt-1 text-2xl font-semibold">{sessionsTotal}</div>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-background/82 p-4 shadow-sm backdrop-blur">
-            <div className="text-xs text-muted-foreground">
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <MessageSquareReply className="size-4 text-emerald-600" />
               {t('serviceDesk.summary.manualActive')}
             </div>
-            <div className="mt-2 flex items-center gap-2 text-2xl font-semibold">
-              <MessageSquareReply className="size-5 text-emerald-600" />
+            <div className="mt-1 text-2xl font-semibold">
               {currentQueueStats.manual}
             </div>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-background/82 p-4 shadow-sm backdrop-blur">
-            <div className="text-xs text-muted-foreground">
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock3 className="size-4 text-amber-600" />
               {t('serviceDesk.summary.pendingActive')}
             </div>
-            <div className="mt-2 flex items-center gap-2 text-2xl font-semibold">
-              <Clock3 className="size-5 text-amber-600" />
+            <div className="mt-1 text-2xl font-semibold">
               {currentQueueStats.pending}
             </div>
           </div>
@@ -297,26 +457,29 @@ export default function ServiceDeskContent() {
           value="workbench"
           className="mt-0 flex min-h-0 flex-1 flex-col gap-4"
         >
-          <SessionFilters
-            queueFilters={QUEUE_FILTERS}
-            queueFilter={queueFilter}
-            searchKeyword={searchKeyword}
-            claimedByFilter={claimedByFilter}
-            loading={sessionsLoading}
-            onQueueFilterChange={setQueueFilter}
-            onSearchKeywordChange={setSearchKeyword}
-            onClaimedByFilterChange={setClaimedByFilter}
-            onRefresh={() => void loadSessions()}
-          />
-
           <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <SessionList
-              sessions={sessions}
-              total={sessionsTotal}
-              loading={sessionsLoading}
-              selectedSessionId={selectedSessionId}
-              onSelect={setSelectedSessionId}
-            />
+            <div className="flex min-h-0 flex-col gap-4">
+              <SessionFilters
+                queueFilters={QUEUE_FILTERS}
+                queueFilter={queueFilter}
+                searchKeyword={searchKeyword}
+                claimedByFilter={claimedByFilter}
+                loading={sessionsLoading}
+                onQueueFilterChange={setQueueFilter}
+                onSearchKeywordChange={setSearchKeyword}
+                onClaimedByFilterChange={setClaimedByFilter}
+                onRefresh={() => void loadSessions()}
+              />
+              <div className="min-h-0 flex-1">
+                <SessionList
+                  sessions={sessions}
+                  total={sessionsTotal}
+                  loading={sessionsLoading}
+                  selectedSessionId={selectedSessionId}
+                  onSelect={setSelectedSessionId}
+                />
+              </div>
+            </div>
             <SessionDetail session={selectedSession} onRefresh={loadSessions} />
           </div>
         </TabsContent>
