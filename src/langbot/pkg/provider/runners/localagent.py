@@ -281,25 +281,7 @@ class LocalAgentRunner(runner.RequestRunner):
         except AttributeError:
             is_stream = False
 
-        local_faq_answer = self._match_local_faq_answer(query, user_message_text)
-        if local_faq_answer is not None:
-            reply_text = await self._polish_local_faq_answer(
-                query=query,
-                user_message_text=user_message_text,
-                matched_question=user_message_text,
-                standard_answer=local_faq_answer,
-            )
-            if is_stream:
-                yield provider_message.MessageChunk(
-                    role='assistant',
-                    content=reply_text,
-                    is_final=True,
-                    msg_sequence=1,
-                )
-            else:
-                yield provider_message.Message(role='assistant', content=reply_text)
-            return
-
+        has_knowledge_results = False
         if kb_uuids and user_message_text:
             # only support text for now
             all_results: list[rag_context.RetrievalResultEntry] = []
@@ -323,6 +305,8 @@ class LocalAgentRunner(runner.RequestRunner):
 
                 if result:
                     all_results.extend(result)
+
+            has_knowledge_results = bool(all_results)
 
             local_faq_result = self._extract_local_faq_retrieve_result(all_results)
             if local_faq_result is not None:
@@ -368,6 +352,26 @@ class LocalAgentRunner(runner.RequestRunner):
                 if ce.type == 'text':
                     ce.text = final_user_message_text
                     break
+
+        if user_message_text and not has_knowledge_results:
+            local_faq_answer = self._match_local_faq_answer(query, user_message_text)
+            if local_faq_answer is not None:
+                reply_text = await self._polish_local_faq_answer(
+                    query=query,
+                    user_message_text=user_message_text,
+                    matched_question=user_message_text,
+                    standard_answer=local_faq_answer,
+                )
+                if is_stream:
+                    yield provider_message.MessageChunk(
+                        role='assistant',
+                        content=reply_text,
+                        is_final=True,
+                        msg_sequence=1,
+                    )
+                else:
+                    yield provider_message.Message(role='assistant', content=reply_text)
+                return
 
         req_messages = query.prompt.messages.copy() + query.messages.copy() + [user_message]
 

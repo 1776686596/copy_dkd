@@ -9,6 +9,7 @@ import langbot_plugin.api.entities.builtin.platform.message as platform_message
 import langbot_plugin.api.entities.builtin.pipeline.query as pipeline_query
 import langbot_plugin.api.entities.builtin.platform.events as platform_events
 from .local_agent_prompt import build_local_agent_prompt_config
+from .knowledge_base_selection import resolve_knowledge_base_uuids
 
 
 @stage.stage_class('PreProcessor')
@@ -188,11 +189,11 @@ class PreProcessor(stage.PipelineStage):
 
         # Extract knowledge base UUIDs into query variables so plugins can modify them
         # during PromptPreProcessing before the runner performs retrieval.
-        kb_uuids = query.pipeline_config['ai']['local-agent'].get('knowledge-bases', [])
-        if not kb_uuids:
-            old_kb_uuid = query.pipeline_config['ai']['local-agent'].get('knowledge-base', '')
-            if old_kb_uuid and old_kb_uuid != '__none__':
-                kb_uuids = [old_kb_uuid]
+        kb_uuids = resolve_knowledge_base_uuids(
+            local_agent_config=query.pipeline_config['ai']['local-agent'],
+            query_variables=query.variables,
+            runtime_knowledge_bases=getattr(getattr(self.ap, 'rag_mgr', None), 'knowledge_bases', None),
+        )
         query.variables['_knowledge_base_uuids'] = list(kb_uuids)
 
         # =========== 触发事件 PromptPreProcessing

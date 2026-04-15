@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -161,3 +162,65 @@ async def test_polish_local_faq_answer_falls_back_when_model_raises():
     )
 
     assert result == '鬼王前期开荒更快，焚天更适合中后期团战。'
+
+
+@pytest.mark.asyncio
+async def test_run_prefers_bound_knowledge_base_over_local_faq():
+    import langbot_plugin.api.entities.builtin.provider.message as provider_message
+
+    from langbot.pkg.provider.runners.localagent import LocalAgentRunner
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.rag_mgr = Mock()
+
+    runtime_kb = Mock()
+    runtime_kb.retrieve = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                metadata={
+                    'local_faq_answer': '知识库里的直播间答复',
+                    'matched_question': '有直播间吗',
+                },
+                content=[],
+            )
+        ]
+    )
+    mock_app.rag_mgr.get_knowledge_base_by_uuid = AsyncMock(return_value=runtime_kb)
+
+    runner = LocalAgentRunner(mock_app, pipeline_config={})
+    runner._match_local_faq_answer = Mock(return_value='代码 JSON 里的答复')
+
+    async def _return_standard_answer(**kwargs):
+        return kwargs['standard_answer']
+
+    runner._polish_local_faq_answer = AsyncMock(side_effect=_return_standard_answer)
+
+    query = Mock()
+    query.variables = {'_knowledge_base_uuids': ['kb-live-room']}
+    query.user_message = provider_message.Message(role='user', content='有直播间吗')
+    query.adapter = Mock()
+    query.adapter.is_stream_output_supported = AsyncMock(return_value=False)
+    query.pipeline_config = {
+        'ai': {
+            'local-agent': {
+                'local-faq-enabled': True,
+                'local-faq-path': 'res/local_faq/wecom_agentic_faq.json',
+            }
+        },
+        'output': {'misc': {'remove-think': False}},
+    }
+    query.prompt = SimpleNamespace(messages=[])
+    query.messages = []
+    query.bot_uuid = 'bot-1'
+    query.sender_id = 'user-1'
+    query.session = SimpleNamespace(
+        launcher_type=SimpleNamespace(value='person'),
+        launcher_id='user-1',
+    )
+
+    result = [message async for message in runner.run(query)]
+
+    assert len(result) == 1
+    assert result[0].content == '知识库里的直播间答复'
+    runner._match_local_faq_answer.assert_not_called()

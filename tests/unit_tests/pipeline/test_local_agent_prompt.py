@@ -18,7 +18,8 @@ def test_build_local_agent_prompt_uses_business_fields():
     assert '应用描述：智能客服机器人' in prompt[0]['content']
     assert '应用设定：适配老玩家的传奇游戏智能客服，优先依据知识库回答。' in prompt[0]['content']
     assert '开场介绍参考：老板你好呀！专属新游福～利来啦🎁' in prompt[0]['content']
-    assert '稍等下哈' in prompt[0]['content']
+    assert '稍等下哈' not in prompt[0]['content']
+    assert '转接人工客服继续处理' in prompt[0]['content']
 
 
 def test_build_local_agent_prompt_falls_back_to_legacy_prompt():

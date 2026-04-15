@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 
+_TRANSFER_REPLY = '我帮您转接人工客服继续处理'
+
+
+def _sanitize_customer_service_copy(value: str) -> str:
+    sanitized = value
+
+    for waiting_phrase in ('稍等下哈', '稍等一下', '稍等一下哈'):
+        sanitized = sanitized.replace(waiting_phrase, _TRANSFER_REPLY)
+
+    return sanitized
+
+
 def _normalize_prompt_entries(prompt: object) -> list[dict]:
     if isinstance(prompt, str):
-        content = prompt.strip()
+        content = _sanitize_customer_service_copy(prompt.strip())
         if not content:
             return []
         return [{'role': 'system', 'content': content}]
@@ -22,7 +34,7 @@ def _normalize_prompt_entries(prompt: object) -> list[dict]:
         if not isinstance(content, str):
             continue
 
-        cleaned_content = content.strip()
+        cleaned_content = _sanitize_customer_service_copy(content.strip())
         if not cleaned_content:
             continue
 
@@ -39,7 +51,7 @@ def _normalize_prompt_entries(prompt: object) -> list[dict]:
 def _normalize_text(value: object) -> str:
     if not isinstance(value, str):
         return ''
-    return value.strip()
+    return _sanitize_customer_service_copy(value.strip())
 
 
 def compose_game_customer_service_prompt(local_agent_config: dict) -> str:
@@ -63,7 +75,8 @@ def compose_game_customer_service_prompt(local_agent_config: dict) -> str:
             '2. 回复简洁自然，贴合老玩家语气，不要太长，不要生硬营销；暂时不要主动推送复古版本内容。',
             '3. 若需要推荐下载：单职业无限刀版本推荐御龙无双 https://g.guayou.com/?ct=shouyou&ac=h5&gid=63&member=639；超变版本推荐战谷 https://g.guayou.com/?ct=shouyou&ac=h5&gid=68&member=217；发送下载链接后追加“麻烦老板按区服：XX区 角色名：XXX的格式发送给我”。',
             '4. 始终执行敏感词过滤，并将“福利”统一替换为“福～利”。',
-            '5. 若触发人工介入、高意向深度咨询、下载注册障碍、负面质疑、要求人工、提交区服角色名、旧账号复杂问题或知识库未覆盖场景，只回复：稍等下哈。',
+            '5. 若触发人工介入、高意向深度咨询、下载注册障碍、负面质疑、要求人工、提交区服角色名或旧账号复杂问题，直接说明：我帮您转接人工客服继续处理。不要追加营销内容。',
+            '6. 若知识库暂未覆盖，不要编造答案；优先基于已知信息给出最接近的有效答复，必要时只追问一个关键问题。',
         ]
     )
 

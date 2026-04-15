@@ -1144,12 +1144,14 @@ export default function DynamicFormItemComponent({
               </div>
               <DialogFooter>
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => setKbDialogOpen(false)}
                 >
                   {t('common.cancel')}
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => {
                     field.onChange(tempSelectedKBIds);
                     setKbDialogOpen(false);
@@ -1295,12 +1297,14 @@ export default function DynamicFormItemComponent({
               </div>
               <DialogFooter>
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => setToolsDialogOpen(false)}
                 >
                   {t('common.cancel')}
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => {
                     field.onChange(tempSelectedToolNames);
                     setToolsDialogOpen(false);
