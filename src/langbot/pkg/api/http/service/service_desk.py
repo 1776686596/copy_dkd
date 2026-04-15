@@ -106,6 +106,64 @@ class ServiceDeskService:
         return messages
 
     @staticmethod
+    def _get_message_key(message: dict) -> str:
+        message_id = str(message.get('id', '') or '')
+        if message_id:
+            return message_id
+
+        return '::'.join(
+            [
+                str(message.get('session_id', '') or ''),
+                str(message.get('timestamp', '') or ''),
+                str(message.get('role', '') or ''),
+                str(message.get('message_content', '') or ''),
+            ]
+        )
+
+    @staticmethod
+    def _parse_message_timestamp(value) -> datetime.datetime:
+        if isinstance(value, datetime.datetime):
+            if value.tzinfo is not None:
+                return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            return value
+
+        if isinstance(value, str) and value:
+            normalized = value.replace('Z', '+00:00')
+            try:
+                parsed = datetime.datetime.fromisoformat(normalized)
+            except ValueError:
+                return datetime.datetime.min
+            if parsed.tzinfo is not None:
+                return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            return parsed
+
+        return datetime.datetime.min
+
+    @classmethod
+    def _merge_timeline_messages(
+        cls,
+        *message_groups: list[dict],
+        limit: int = 200,
+    ) -> list[dict]:
+        merged: dict[str, dict] = {}
+        for group in message_groups:
+            for message in group:
+                if not message:
+                    continue
+                merged[cls._get_message_key(message)] = message
+
+        sorted_messages = sorted(
+            merged.values(),
+            key=lambda item: (
+                cls._parse_message_timestamp(item.get('timestamp')),
+                str(item.get('id', '') or ''),
+            ),
+        )
+        if limit > 0 and len(sorted_messages) > limit:
+            return sorted_messages[-limit:]
+        return sorted_messages
+
+    @staticmethod
     def _get_sender_name(event) -> str | None:
         sender = getattr(event, 'sender', None)
         if sender is None:
@@ -475,22 +533,26 @@ class ServiceDeskService:
             else session
         )
 
-        messages: list[dict] = []
+        direct_messages: list[dict] = []
         monitoring_service = getattr(self.ap, 'monitoring_service', None)
         if monitoring_service is not None and hasattr(monitoring_service, 'get_messages'):
-            messages, _ = await monitoring_service.get_messages(
+            direct_messages, _ = await monitoring_service.get_messages(
                 session_ids=[session_id],
                 limit=200,
                 offset=0,
             )
-        if not messages:
-            messages = await self._load_messages_by_external_user(
-                bot_uuid=str(self._get_value(session, 'bot_uuid', '') or ''),
-                external_user_id=str(
-                    self._get_value(session, 'external_user_id', '') or ''
-                ),
-                limit=200,
-            )
+        external_messages = await self._load_messages_by_external_user(
+            bot_uuid=str(self._get_value(session, 'bot_uuid', '') or ''),
+            external_user_id=str(
+                self._get_value(session, 'external_user_id', '') or ''
+            ),
+            limit=200,
+        )
+        messages = self._merge_timeline_messages(
+            external_messages,
+            direct_messages,
+            limit=200,
+        )
 
         bot_payload = {'uuid': self._get_value(session, 'bot_uuid')}
         platform_mgr = getattr(self.ap, 'platform_mgr', None)

@@ -262,6 +262,113 @@ async def test_get_session_detail_falls_back_to_external_user_messages_when_sess
 
 
 @pytest.mark.asyncio
+async def test_get_session_detail_merges_direct_and_external_user_messages_when_direct_logs_exist():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    fallback_rows = [
+        _FakeRow(
+            {
+                'id': 'msg-history-1',
+                'timestamp': datetime.datetime(2026, 4, 15, 9, 30, 0),
+                'bot_id': 'bot-lark-1',
+                'bot_name': '飞书客服机器人',
+                'pipeline_id': 'pipeline-1',
+                'pipeline_name': '客服流程',
+                'message_content': '您好，我想咨询订单状态',
+                'session_id': 'person_ou_customer_1',
+                'status': 'success',
+                'level': 'info',
+                'platform': 'lark',
+                'user_id': 'ou_customer_1',
+                'user_name': '客户A',
+                'runner_name': None,
+                'variables': None,
+                'role': 'user',
+            }
+        ),
+        _FakeRow(
+            {
+                'id': 'msg-history-2',
+                'timestamp': datetime.datetime(2026, 4, 15, 9, 31, 0),
+                'bot_id': 'bot-lark-1',
+                'bot_name': '飞书客服机器人',
+                'pipeline_id': 'pipeline-1',
+                'pipeline_name': '客服流程',
+                'message_content': '已经为您转人工处理',
+                'session_id': 'person_ou_customer_1',
+                'status': 'success',
+                'level': 'info',
+                'platform': 'lark',
+                'user_id': 'ou_customer_1',
+                'user_name': '客户A',
+                'runner_name': None,
+                'variables': None,
+                'role': 'assistant',
+            }
+        ),
+    ]
+
+    async def _execute_async(statement):
+        statement_text = str(statement).lower()
+        if 'from monitoring_messages' in statement_text:
+            return _FakeListResult(fallback_rows)
+        raise AssertionError(f'unexpected statement: {statement_text}')
+
+    ap = Mock()
+    ap.persistence_mgr.execute_async = AsyncMock(side_effect=_execute_async)
+    ap.persistence_mgr.serialize_model = Mock(
+        side_effect=lambda _model, row: dict(row._mapping) if hasattr(row, '_mapping') else row
+    )
+    ap.monitoring_service.get_messages = AsyncMock(
+        return_value=(
+            [
+                {
+                    'id': 'msg-manual-1',
+                    'timestamp': '2026-04-15T09:32:00',
+                    'message_content': '人工已接手，请补充订单号',
+                    'session_id': 'person_tenant-key-1:ou_customer_1',
+                    'role': 'assistant',
+                    'status': 'success',
+                    'level': 'info',
+                    'platform': 'lark',
+                    'user_id': 'ou_customer_1',
+                }
+            ],
+            1,
+        )
+    )
+    ap.platform_mgr.get_bot_by_uuid = AsyncMock(
+        return_value=SimpleNamespace(bot_entity=SimpleNamespace(name='飞书客服机器人'))
+    )
+
+    service = ServiceDeskService(ap)
+    service._get_session = AsyncMock(
+        return_value={
+            'session_id': 'person_tenant-key-1:ou_customer_1',
+            'bot_uuid': 'bot-lark-1',
+            'pipeline_uuid': 'pipeline-1',
+            'external_user_id': 'ou_customer_1',
+            'handoff_reason': 'manual',
+        }
+    )
+
+    detail = await service.get_session_detail('person_tenant-key-1:ou_customer_1')
+
+    assert [item['id'] for item in detail['messages']] == [
+        'msg-history-1',
+        'msg-history-2',
+        'msg-manual-1',
+    ]
+    ap.monitoring_service.get_messages.assert_awaited_once_with(
+        session_ids=['person_tenant-key-1:ou_customer_1'],
+        limit=200,
+        offset=0,
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_session_detail_uses_first_row_without_consuming_result_twice():
     from types import SimpleNamespace
 
