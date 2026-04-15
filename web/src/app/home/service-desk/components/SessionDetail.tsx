@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { mergeServiceDeskTimelineMessages } from '../utils/timelineMessages.js';
 import MessageTimeline from './MessageTimeline';
 import QuickReplyPanel from './QuickReplyPanel';
 
@@ -97,11 +98,26 @@ export default function SessionDetail({
     const loadDetail = async () => {
       setDetailLoading(true);
       try {
-        const resp = await httpClient.getServiceDeskSessionDetail(
-          session.session_id,
-        );
+        const [resp, monitoringResp] = await Promise.all([
+          httpClient.getServiceDeskSessionDetail(session.session_id),
+          httpClient
+            .getSessionMessages(session.session_id, 200, 0)
+            .catch((error) => {
+              console.error(
+                'Failed to load monitoring messages for service desk session:',
+                error,
+              );
+              return null;
+            }),
+        ]);
         if (!active) return;
-        setDetail(resp);
+        setDetail({
+          ...resp,
+          messages: mergeServiceDeskTimelineMessages(
+            resp.messages,
+            monitoringResp?.messages ?? [],
+          ),
+        });
       } catch (error) {
         console.error('Failed to load service desk session detail:', error);
         if (active) {
