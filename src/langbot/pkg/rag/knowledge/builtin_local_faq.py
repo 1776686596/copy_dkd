@@ -254,18 +254,47 @@ def _local_faq_retrieve_score(query: str, question: str) -> float:
 
     normalized_query = local_faq_utils._normalize_text(query)
     normalized_question = local_faq_utils._normalize_text(question)
-    if (
-        len(normalized_query) >= 4
-        and normalized_query
-        and normalized_question
-        and normalized_query in normalized_question
-    ):
+    loose_query_variants = _build_loose_match_variants(normalized_query)
+    loose_question_variants = _build_loose_match_variants(normalized_question)
+
+    if _has_strong_containment_match(loose_query_variants, loose_question_variants):
         # 导入 FAQ 常见“短问句命中长题目”场景，例如：
         # “有直播间吗” -> “有直播间吗，发我先…看看”
+        # “有没有直播间” -> “有直播间吗，发我先…看看”
         # 对这类完整包含关系直接提升为强命中，避免被过高阈值挡掉。
         return max(score, 0.96)
 
     return score
+
+
+def _build_loose_match_variants(text: str) -> set[str]:
+    variants = {text}
+    cleaned = text
+
+    for token in ('请问', '想问下', '想问问', '想咨询下', '咨询下'):
+        cleaned = cleaned.replace(token, '')
+
+    for token in ('吗', '呢', '呀', '啊', '吧', '嘛', '么'):
+        cleaned = cleaned.replace(token, '')
+
+    variants.add(cleaned)
+
+    if cleaned.startswith('有没有') and len(cleaned) > 3:
+        variants.add('有' + cleaned[3:])
+
+    if cleaned.startswith('有木有') and len(cleaned) > 3:
+        variants.add('有' + cleaned[3:])
+
+    return {variant for variant in variants if len(variant) >= 3}
+
+
+def _has_strong_containment_match(query_variants: set[str], question_variants: set[str]) -> bool:
+    for query_variant in query_variants:
+        for question_variant in question_variants:
+            if query_variant in question_variant or question_variant in query_variant:
+                return True
+
+    return False
 
 
 def _normalize_entry(item: object) -> dict | None:
