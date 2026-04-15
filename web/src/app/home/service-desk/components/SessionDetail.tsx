@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ServiceDeskAssistDraft,
@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { mergeServiceDeskTimelineMessages } from '../utils/timelineMessages.js';
 import MessageTimeline from './MessageTimeline';
 import QuickReplyPanel from './QuickReplyPanel';
 
@@ -81,6 +80,26 @@ export default function SessionDetail({
   const canRelease = session?.queue_status === 'manual';
   const canReturnToAi = session?.queue_status !== 'ai';
 
+  const loadDetail = useCallback(
+    async (sessionId: string, showError: boolean = true) => {
+      setDetailLoading(true);
+      try {
+        const resp = await httpClient.getServiceDeskSessionDetail(sessionId);
+        setDetail(resp);
+        return resp;
+      } catch (error) {
+        console.error('Failed to load service desk session detail:', error);
+        if (showError) {
+          toast.error(t('serviceDesk.workbench.detailLoadError'));
+        }
+        return null;
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [t],
+  );
+
   useEffect(() => {
     setReplyText('');
     setAssistDraft(null);
@@ -96,28 +115,12 @@ export default function SessionDetail({
     let active = true;
 
     const loadDetail = async () => {
-      setDetailLoading(true);
       try {
-        const [resp, monitoringResp] = await Promise.all([
-          httpClient.getServiceDeskSessionDetail(session.session_id),
-          httpClient
-            .getSessionMessages(session.session_id, 200, 0)
-            .catch((error) => {
-              console.error(
-                'Failed to load monitoring messages for service desk session:',
-                error,
-              );
-              return null;
-            }),
-        ]);
+        const resp = await httpClient.getServiceDeskSessionDetail(
+          session.session_id,
+        );
         if (!active) return;
-        setDetail({
-          ...resp,
-          messages: mergeServiceDeskTimelineMessages(
-            resp.messages,
-            monitoringResp?.messages ?? [],
-          ),
-        });
+        setDetail(resp);
       } catch (error) {
         console.error('Failed to load service desk session detail:', error);
         if (active) {
@@ -130,6 +133,7 @@ export default function SessionDetail({
       }
     };
 
+    setDetailLoading(true);
     void loadDetail();
 
     return () => {
@@ -156,13 +160,15 @@ export default function SessionDetail({
     if (!session || !replyText.trim() || !canReply) return;
     setSending(true);
     try {
+      const currentSessionId = session.session_id;
       await httpClient.replyServiceDeskSession(
-        session.session_id,
+        currentSessionId,
         replyText.trim(),
       );
       setReplyText('');
+      await loadDetail(currentSessionId, false);
       toast.success(t('serviceDesk.workbench.replySuccess'));
-      await onRefresh();
+      await onRefresh(false);
     } catch (error) {
       console.error('Failed to reply service desk session:', error);
       toast.error(t('serviceDesk.workbench.replyError'));
