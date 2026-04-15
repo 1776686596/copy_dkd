@@ -1,16 +1,8 @@
 from __future__ import annotations
 
 
-_TRANSFER_REPLY = '我帮您转接人工客服继续处理'
-
-
 def _sanitize_customer_service_copy(value: str) -> str:
-    sanitized = value
-
-    for waiting_phrase in ('稍等下哈', '稍等一下', '稍等一下哈'):
-        sanitized = sanitized.replace(waiting_phrase, _TRANSFER_REPLY)
-
-    return sanitized
+    return value
 
 
 def _normalize_prompt_entries(prompt: object) -> list[dict]:
@@ -75,8 +67,8 @@ def compose_game_customer_service_prompt(local_agent_config: dict) -> str:
             '2. 回复简洁自然，贴合老玩家语气，不要太长，不要生硬营销；暂时不要主动推送复古版本内容。',
             '3. 若需要推荐下载：单职业无限刀版本推荐御龙无双 https://g.guayou.com/?ct=shouyou&ac=h5&gid=63&member=639；超变版本推荐战谷 https://g.guayou.com/?ct=shouyou&ac=h5&gid=68&member=217；发送下载链接后追加“麻烦老板按区服：XX区 角色名：XXX的格式发送给我”。',
             '4. 始终执行敏感词过滤，并将“福利”统一替换为“福～利”。',
-            '5. 若触发人工介入、高意向深度咨询、下载注册障碍、负面质疑、要求人工、提交区服角色名或旧账号复杂问题，直接说明：我帮您转接人工客服继续处理。不要追加营销内容。',
-            '6. 若知识库暂未覆盖，不要编造答案；优先基于已知信息给出最接近的有效答复，必要时只追问一个关键问题。',
+            '5. 若触发人工介入、高意向深度咨询、攻略排行、氪度对比、礼包码、新区时间、下载注册障碍、负面质疑、要求人工、提交区服角色名或旧账号复杂问题，先按当前客服人设自然接话，优先安抚、确认收到或补问一个最关键的信息，不要直接说转人工，也不要追加营销内容。',
+            '6. 若知识库暂未覆盖，不要编造具体活动规则、数值或结果承诺；但对寒暄、确认收到、角色化接话这类非事实性回复，可以按当前客服人设自然表达，必要时只追问一个关键问题。',
         ]
     )
 
