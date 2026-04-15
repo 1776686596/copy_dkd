@@ -159,7 +159,7 @@ class LocalFAQKnowledgeBase:
             best_question = ''
             best_score = 0.0
             for question in row.questions:
-                score = local_faq_utils._similarity_score(query, question)
+                score = _local_faq_retrieve_score(query, question)
                 if score > best_score:
                     best_score = score
                     best_question = question
@@ -247,6 +247,25 @@ def build_retrieve_result(
         },
         'content': [{'type': 'text', 'text': answer}],
     }
+
+
+def _local_faq_retrieve_score(query: str, question: str) -> float:
+    score = local_faq_utils._similarity_score(query, question)
+
+    normalized_query = local_faq_utils._normalize_text(query)
+    normalized_question = local_faq_utils._normalize_text(question)
+    if (
+        len(normalized_query) >= 4
+        and normalized_query
+        and normalized_question
+        and normalized_query in normalized_question
+    ):
+        # 导入 FAQ 常见“短问句命中长题目”场景，例如：
+        # “有直播间吗” -> “有直播间吗，发我先…看看”
+        # 对这类完整包含关系直接提升为强命中，避免被过高阈值挡掉。
+        return max(score, 0.96)
+
+    return score
 
 
 def _normalize_entry(item: object) -> dict | None:

@@ -217,6 +217,47 @@ async def test_builtin_local_faq_runtime_retrieve_returns_matching_entry():
 
 
 @pytest.mark.asyncio
+async def test_builtin_local_faq_runtime_retrieve_matches_contained_short_question():
+    from langbot.pkg.entity.persistence import rag as persistence_rag
+    from langbot.pkg.rag.knowledge.kbmgr import RAGManager
+
+    mock_result = Mock()
+    mock_result.all.return_value = [
+        persistence_rag.LocalFAQEntry(
+            uuid='entry-2',
+            kb_id='kb-1',
+            questions=['有直播间吗，发我先…看看'],
+            answer='老板必须有直播间！',
+            source_file_id='file-2',
+            enabled=True,
+            sort_order=0,
+        )
+    ]
+
+    mock_app = Mock()
+    mock_app.logger = Mock()
+    mock_app.persistence_mgr = Mock()
+    mock_app.persistence_mgr.execute_async = AsyncMock(return_value=mock_result)
+
+    kb_entity = persistence_rag.KnowledgeBase(
+        uuid='kb-1',
+        name='本地问答库',
+        description='',
+        knowledge_engine_plugin_id='builtin/local-faq',
+        creation_settings={},
+        retrieval_settings={},
+    )
+
+    manager = RAGManager(mock_app)
+    runtime_kb = await manager.load_knowledge_base(kb_entity)
+    results = await runtime_kb.retrieve('有直播间吗', settings={'min_similarity': 0.95})
+
+    assert len(results) == 1
+    assert results[0].metadata['matched_question'] == '有直播间吗，发我先…看看'
+    assert results[0].content[0].text == '老板必须有直播间！'
+
+
+@pytest.mark.asyncio
 async def test_builtin_local_faq_create_knowledge_base_succeeds_without_plugin_hook():
     from langbot.pkg.rag.knowledge.kbmgr import RAGManager
 
