@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import sqlalchemy
 
 from ....core import app
+from ....entity.persistence import monitoring as persistence_monitoring
 from ....entity.persistence import service_desk as persistence_service_desk
 
 
@@ -69,6 +70,40 @@ class ServiceDeskService:
         if isinstance(session, dict):
             return session.get(key, default)
         return getattr(session, key, default)
+
+    async def _load_messages_by_external_user(
+        self,
+        *,
+        bot_uuid: str,
+        external_user_id: str,
+        limit: int = 200,
+    ) -> list[dict]:
+        if not bot_uuid or not external_user_id:
+            return []
+
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(persistence_monitoring.MonitoringMessage)
+            .where(
+                persistence_monitoring.MonitoringMessage.bot_id == bot_uuid,
+                persistence_monitoring.MonitoringMessage.user_id == external_user_id,
+            )
+            .order_by(
+                persistence_monitoring.MonitoringMessage.timestamp.asc(),
+                persistence_monitoring.MonitoringMessage.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        messages: list[dict] = []
+        for row in result.all():
+            msg = row[0] if isinstance(row, tuple) else self._unwrap_model(row)
+            serialized_msg = self.ap.persistence_mgr.serialize_model(
+                persistence_monitoring.MonitoringMessage,
+                msg,
+            )
+            messages.append(serialized_msg)
+
+        return messages
 
     @staticmethod
     def _get_sender_name(event) -> str | None:
@@ -447,6 +482,14 @@ class ServiceDeskService:
                 session_ids=[session_id],
                 limit=200,
                 offset=0,
+            )
+        if not messages:
+            messages = await self._load_messages_by_external_user(
+                bot_uuid=str(self._get_value(session, 'bot_uuid', '') or ''),
+                external_user_id=str(
+                    self._get_value(session, 'external_user_id', '') or ''
+                ),
+                limit=200,
             )
 
         bot_payload = {'uuid': self._get_value(session, 'bot_uuid')}
