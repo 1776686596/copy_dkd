@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import datetime
+import json
+import re
 import uuid
 from dataclasses import dataclass
 
 import sqlalchemy
 
 from ....core import app
+from ....entity.persistence import monitoring as persistence_monitoring
 from ....entity.persistence import service_desk as persistence_service_desk
 
 
@@ -69,6 +72,15 @@ class ServiceDeskService:
         if isinstance(session, dict):
             return session.get(key, default)
         return getattr(session, key, default)
+
+    @staticmethod
+    def _get_row_value(row, key: str, default=None):
+        if row is None:
+            return default
+        mapping = getattr(row, '_mapping', None)
+        if mapping is not None:
+            return mapping.get(key, default)
+        return ServiceDeskService._get_value(row, key, default)
 
     @staticmethod
     def _get_sender_name(event) -> str | None:
@@ -137,6 +149,130 @@ class ServiceDeskService:
             'external_user_id': str(ServiceDeskService._get_value(source, 'external_user_id', '') or ''),
             'last_message_id': str(ServiceDeskService._get_value(source, 'last_message_id', '') or ''),
         }
+
+    @staticmethod
+    def _compact_preview_text(value: str, limit: int = 120) -> str:
+        normalized = re.sub(r'\s+', ' ', value).strip()
+        if len(normalized) <= limit:
+            return normalized
+        return f'{normalized[: limit - 3].rstrip()}...'
+
+    @classmethod
+    def _extract_preview_component_text(cls, component: dict) -> str:
+        component_type = str(component.get('type') or '')
+
+        if component_type == 'Plain':
+            return str(component.get('text') or '')
+        if component_type == 'At':
+            display = component.get('display') or component.get('target') or ''
+            return f'@{display}' if display else '@'
+        if component_type == 'AtAll':
+            return '@全体成员'
+        if component_type == 'Image':
+            return '[图片]'
+        if component_type == 'Voice':
+            length = component.get('length')
+            return f'[语音 {length}s]' if length else '[语音]'
+        if component_type == 'File':
+            name = component.get('name')
+            return f'[文件 {name}]' if name else '[文件]'
+        if component_type == 'Quote':
+            return '[引用]'
+        if component_type == 'Forward':
+            return '[转发消息]'
+        if component_type == 'Source':
+            return ''
+        if component_type:
+            return f'[{component_type}]'
+        return ''
+
+    @classmethod
+    def _build_message_preview(cls, message_content: str | None) -> str | None:
+        if not message_content:
+            return None
+
+        preview_text = message_content
+        try:
+            parsed = json.loads(message_content)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = None
+
+        if isinstance(parsed, list):
+            parts = []
+            for item in parsed:
+                if isinstance(item, dict):
+                    component_text = cls._extract_preview_component_text(item)
+                    if component_text:
+                        parts.append(component_text)
+            preview_text = ''.join(parts)
+        elif isinstance(parsed, dict):
+            preview_text = cls._extract_preview_component_text(parsed)
+        elif isinstance(parsed, str):
+            preview_text = parsed
+
+        compacted = cls._compact_preview_text(str(preview_text))
+        return compacted or None
+
+    async def _load_last_message_previews(
+        self,
+        session_ids: list[str],
+    ) -> dict[str, dict]:
+        if not session_ids:
+            return {}
+
+        latest_timestamp_subquery = (
+            sqlalchemy.select(
+                persistence_monitoring.MonitoringMessage.session_id.label('session_id'),
+                sqlalchemy.func.max(
+                    persistence_monitoring.MonitoringMessage.timestamp
+                ).label('latest_timestamp'),
+            )
+            .where(persistence_monitoring.MonitoringMessage.session_id.in_(session_ids))
+            .group_by(persistence_monitoring.MonitoringMessage.session_id)
+            .subquery()
+        )
+
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(
+                persistence_monitoring.MonitoringMessage.session_id,
+                persistence_monitoring.MonitoringMessage.message_content,
+                persistence_monitoring.MonitoringMessage.role,
+                persistence_monitoring.MonitoringMessage.timestamp,
+            )
+            .join(
+                latest_timestamp_subquery,
+                sqlalchemy.and_(
+                    persistence_monitoring.MonitoringMessage.session_id
+                    == latest_timestamp_subquery.c.session_id,
+                    persistence_monitoring.MonitoringMessage.timestamp
+                    == latest_timestamp_subquery.c.latest_timestamp,
+                ),
+            )
+            .order_by(
+                persistence_monitoring.MonitoringMessage.timestamp.desc(),
+                persistence_monitoring.MonitoringMessage.id.desc(),
+            )
+        )
+
+        preview_map: dict[str, dict] = {}
+        for row in result.all():
+            session_id = str(self._get_row_value(row, 'session_id', '') or '')
+            if not session_id or session_id in preview_map:
+                continue
+
+            preview_map[session_id] = {
+                'last_message_preview': self._build_message_preview(
+                    self._get_row_value(row, 'message_content')
+                ),
+                'last_message_role': self._get_row_value(row, 'role'),
+                'last_message_at': (
+                    self._get_row_value(row, 'timestamp').isoformat()
+                    if hasattr(self._get_row_value(row, 'timestamp'), 'isoformat')
+                    else self._get_row_value(row, 'timestamp')
+                ),
+            }
+
+        return preview_map
 
     async def _send_service_desk_text(
         self,
@@ -617,6 +753,16 @@ class ServiceDeskService:
             self.ap.persistence_mgr.serialize_model(persistence_service_desk.ServiceDeskSession, row)
             for row in result.all()
         ]
+
+        preview_map = await self._load_last_message_previews(
+            [
+                str(item.get('session_id', '') or '')
+                for item in items
+                if item.get('session_id')
+            ]
+        )
+        for item in items:
+            item.update(preview_map.get(str(item.get('session_id', '') or ''), {}))
 
         return items, total
 

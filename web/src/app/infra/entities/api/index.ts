@@ -196,6 +196,9 @@ export interface ServiceDeskSession {
   silent_since?: string | null;
   last_customer_message_at?: string | null;
   last_manual_reply_at?: string | null;
+  last_message_preview?: string | null;
+  last_message_role?: string | null;
+  last_message_at?: string | null;
   unresolved_count: number;
   created_at?: string;
   updated_at?: string;
