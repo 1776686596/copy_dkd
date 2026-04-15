@@ -859,10 +859,14 @@ class LarkAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
 
                 return P2CardActionTriggerResponse({'toast': {'type': 'error', 'content': '反馈处理失败'}})
 
+        def sync_on_p2p_chat_entered(_event: lark_oapi.im.v1.P2ImChatAccessEventBotP2pChatEnteredV1):
+            return None
+
         event_handler = (
             lark_oapi.EventDispatcherHandler.builder('', '')
             .register_p2_im_message_receive_v1(sync_on_message)
             .register_p2_card_action_trigger(sync_on_card_action)
+            .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(sync_on_p2p_chat_entered)
             .build()
         )
 
