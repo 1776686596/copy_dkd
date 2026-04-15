@@ -214,7 +214,7 @@ export default function SessionDetail({
 
   if (!session) {
     return (
-      <Card className="flex h-full min-h-0 flex-col justify-center rounded-3xl border-dashed">
+      <Card className="flex min-h-[420px] flex-col justify-center rounded-3xl border-dashed">
         <CardHeader className="items-center text-center">
           <CardTitle>{t('serviceDesk.workbench.noSessionSelected')}</CardTitle>
           <CardDescription className="max-w-md">
@@ -226,7 +226,7 @@ export default function SessionDetail({
   }
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl">
+    <Card className="flex flex-col rounded-3xl">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
@@ -246,7 +246,7 @@ export default function SessionDetail({
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pt-6">
+      <CardContent className="flex flex-col gap-6 pt-6">
         <div className="grid gap-3 md:grid-cols-2">
           {detailRows.map(([label, value]) => (
             <div

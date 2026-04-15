@@ -249,7 +249,7 @@ export default function ServiceDeskContent() {
 
   if (viewMode === 'overview') {
     return (
-      <div className="flex h-full flex-col gap-6">
+      <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1">
         <section className="rounded-[32px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,250,252,0.95)_46%,rgba(241,245,249,0.9))] px-6 py-6 shadow-sm">
           <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-end 2xl:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -393,7 +393,7 @@ export default function ServiceDeskContent() {
     : t('common.none');
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
       <section className="rounded-[28px] border border-border/70 bg-background px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-3">
@@ -476,9 +476,9 @@ export default function ServiceDeskContent() {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="flex min-h-0 flex-1 flex-col"
+        className="flex min-h-0 flex-1 flex-col gap-4 pb-6"
       >
-        <TabsList className="h-11 shrink-0 p-1">
+        <TabsList className="sticky top-0 z-20 h-11 shrink-0 self-start rounded-2xl border border-border/70 bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <TabsTrigger value="workbench">
             {t('serviceDesk.tabs.workbench')}
           </TabsTrigger>
@@ -494,8 +494,8 @@ export default function ServiceDeskContent() {
           value="workbench"
           className="mt-0 flex min-h-0 flex-1 flex-col gap-4"
         >
-          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col gap-4">
+          <div className="grid min-h-0 gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
+            <div className="flex min-h-0 flex-col gap-4 xl:sticky xl:top-[4.75rem]">
               <SessionFilters
                 queueFilters={QUEUE_FILTERS}
                 queueFilter={queueFilter}
@@ -507,7 +507,7 @@ export default function ServiceDeskContent() {
                 onClaimedByFilterChange={setClaimedByFilter}
                 onRefresh={() => void loadSessions()}
               />
-              <div className="min-h-0 flex-1">
+              <div className="min-h-0 xl:h-[calc(100vh-14rem)]">
                 <SessionList
                   sessions={sessions}
                   total={sessionsTotal}
