@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ServiceDeskAssistDraft,
@@ -48,34 +48,6 @@ export default function SessionDetail({
   const [detail, setDetail] = useState<ServiceDeskSessionDetail | null>(null);
 
   const detailSession = detail?.session ?? session;
-
-  const detailRows = useMemo(() => {
-    if (!detailSession) return [];
-
-    return [
-      [t('serviceDesk.workbench.sessionId'), detailSession.session_id],
-      [t('serviceDesk.workbench.pipeline'), detailSession.pipeline_uuid],
-      [t('serviceDesk.workbench.sourceEntry'), detailSession.source_entry_id],
-      [t('serviceDesk.workbench.externalUser'), detailSession.external_user_id],
-      [
-        t('serviceDesk.workbench.claimedBy'),
-        detailSession.claimed_by_user_name || '--',
-      ],
-      [
-        t('serviceDesk.workbench.updatedAt'),
-        formatDateTime(detailSession.updated_at),
-      ],
-      [
-        t('serviceDesk.workbench.handoffReason'),
-        detailSession.handoff_reason || '--',
-      ],
-      [
-        t('serviceDesk.workbench.botName'),
-        detail?.bot.name || detail?.bot.uuid || '--',
-      ],
-    ];
-  }, [detail, detailSession, t]);
-
   const canReply = session?.queue_status === 'manual';
   const canRelease = session?.queue_status === 'manual';
   const canReturnToAi = session?.queue_status !== 'ai';
@@ -226,14 +198,43 @@ export default function SessionDetail({
   }
 
   return (
-    <Card className="flex flex-col rounded-3xl">
-      <CardHeader className="border-b">
+    <Card className="flex min-h-[720px] flex-col overflow-hidden rounded-3xl">
+      <CardHeader className="border-b bg-muted/15">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle>{t('serviceDesk.workbench.detailTitle')}</CardTitle>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>
+                {detailSession?.external_user_id || session.session_id}
+              </CardTitle>
+              {detail?.bot.name || detail?.bot.uuid ? (
+                <Badge variant="outline">
+                  {detail?.bot.name || detail?.bot.uuid}
+                </Badge>
+              ) : null}
+            </div>
             <CardDescription>
-              {t('serviceDesk.workbench.detailDescription')}
+              {detailSession?.source_entry_id
+                ? `${t('serviceDesk.workbench.sourceEntry')} · ${detailSession.source_entry_id}`
+                : t('serviceDesk.workbench.detailDescription')}
             </CardDescription>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {t('serviceDesk.workbench.updatedAt')} ·{' '}
+                {formatDateTime(detailSession?.updated_at)}
+              </span>
+              {detailSession?.claimed_by_user_name ? (
+                <span>
+                  {t('serviceDesk.workbench.claimedBy')} ·{' '}
+                  {detailSession.claimed_by_user_name}
+                </span>
+              ) : null}
+              {detailSession?.handoff_reason ? (
+                <span>
+                  {t('serviceDesk.workbench.handoffReason')} ·{' '}
+                  {detailSession.handoff_reason}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">
@@ -246,90 +247,8 @@ export default function SessionDetail({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-6 pt-6">
-        <div className="grid gap-3 md:grid-cols-2">
-          {detailRows.map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3"
-            >
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-1 break-all text-sm font-medium">{value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">
-                {t('serviceDesk.workbench.claimAction')}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.claimHint')}
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleClaim()}
-              disabled={claiming || session.queue_status === 'manual'}
-            >
-              {t('serviceDesk.workbench.claimAction')}
-            </Button>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleRelease()}
-              disabled={!canRelease || releasing}
-            >
-              {t('serviceDesk.workbench.releaseAction')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleReturnToAi()}
-              disabled={!canReturnToAi || returningToAi}
-            >
-              {t('serviceDesk.workbench.returnToAiAction')}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">
-                {t('serviceDesk.workbench.assistDraftTitle')}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.assistDraftHint')}
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleGenerateAssistDraft()}
-              disabled={generatingDraft}
-            >
-              {t('serviceDesk.workbench.generateAssistDraft')}
-            </Button>
-          </div>
-          {assistDraft ? (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-3">
-              <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.assistDraftBadge')}
-              </div>
-              <div className="mt-1 whitespace-pre-wrap text-sm">
-                {assistDraft.reply_text}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
+      <CardContent className="flex flex-1 flex-col gap-0 p-0">
+        <div className="flex-1 space-y-4 px-6 py-5">
           <div className="space-y-1">
             <div className="text-sm font-medium">
               {t('serviceDesk.workbench.timelineTitle')}
@@ -346,38 +265,97 @@ export default function SessionDetail({
           />
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {t('serviceDesk.workbench.sendReply')}
+        <div className="border-t bg-muted/10 px-6 py-5">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.sendReply')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {canReply
+                    ? t('serviceDesk.workbench.replyPlaceholder')
+                    : t('serviceDesk.workbench.claimHint')}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleClaim()}
+                  disabled={claiming || session.queue_status === 'manual'}
+                >
+                  {t('serviceDesk.workbench.claimAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleRelease()}
+                  disabled={!canRelease || releasing}
+                >
+                  {t('serviceDesk.workbench.releaseAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleReturnToAi()}
+                  disabled={!canReturnToAi || returningToAi}
+                >
+                  {t('serviceDesk.workbench.returnToAiAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleGenerateAssistDraft()}
+                  disabled={generatingDraft}
+                >
+                  {t('serviceDesk.workbench.generateAssistDraft')}
+                </Button>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {canReply
-                ? t('serviceDesk.workbench.replyPlaceholder')
-                : t('serviceDesk.workbench.claimHint')}
+            {assistDraft ? (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-background/80 px-4 py-3">
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.assistDraftBadge')}
+                </div>
+                <div className="mt-1 whitespace-pre-wrap text-sm">
+                  {assistDraft.reply_text}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.assistDraftTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.assistDraftHint')}
+                </div>
+              </div>
+              <QuickReplyPanel
+                botUuid={session.bot_uuid}
+                onInsert={(value) => {
+                  setReplyText((prev) => (prev ? `${prev}\n${value}` : value));
+                }}
+              />
+              <Textarea
+                rows={7}
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+                placeholder={t('serviceDesk.workbench.replyPlaceholder')}
+                disabled={!canReply || sending}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => void handleReply()}
+                  disabled={!canReply || !replyText.trim() || sending}
+                >
+                  {t('serviceDesk.workbench.sendReply')}
+                </Button>
+              </div>
             </div>
-          </div>
-          <QuickReplyPanel
-            botUuid={session.bot_uuid}
-            onInsert={(value) => {
-              setReplyText((prev) => (prev ? `${prev}\n${value}` : value));
-            }}
-          />
-          <Textarea
-            rows={7}
-            value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
-            placeholder={t('serviceDesk.workbench.replyPlaceholder')}
-            disabled={!canReply || sending}
-          />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void handleReply()}
-              disabled={!canReply || !replyText.trim() || sending}
-            >
-              {t('serviceDesk.workbench.sendReply')}
-            </Button>
           </div>
         </div>
       </CardContent>

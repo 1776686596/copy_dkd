@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 
@@ -236,3 +238,223 @@ async def test_send_structured_reply_uses_service_desk_sender_and_runtime_adapte
         user_name='客户A',
         role='assistant',
     )
+
+
+class _FakeMessageChain:
+    def __init__(self, text: str):
+        self._text = text
+
+    def __str__(self) -> str:
+        return self._text
+
+    def model_dump(self):
+        return [
+            {'type': 'Source'},
+            {'type': 'Plain', 'text': self._text},
+        ]
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_message_records_user_message_when_manual_session_skips_pipeline():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    ap = Mock()
+    ap.monitoring_service.record_message = AsyncMock()
+    ap.monitoring_service.update_session_activity = AsyncMock(return_value=True)
+
+    service = ServiceDeskService(ap)
+    service._touch_session = AsyncMock(
+        return_value={
+            'session_id': 'person_escort-account:external-customer-1',
+            'mode': 'manual',
+            'queue_status': 'manual',
+            'manual_claimed_at': None,
+            'silent_since': None,
+        }
+    )
+    service.get_bot_config = AsyncMock(return_value={'enabled': True})
+    service.list_materials = AsyncMock(return_value=[])
+
+    bot_entity = SimpleNamespace(
+        adapter='wecomweb',
+        uuid='bot-1',
+        name='客服机器人',
+        use_pipeline_uuid='pipeline-1',
+        use_pipeline_name='默认流程',
+    )
+    event = SimpleNamespace(
+        message_chain=_FakeMessageChain('我补充一下订单号'),
+        source_platform_object=SimpleNamespace(),
+        sender=SimpleNamespace(id='customer-1', nickname='客户A'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'escort-account',
+        'external_user_id': 'external-customer-1',
+        'last_message_id': 'msg-1',
+    }
+    adapter.get_launcher_id.return_value = 'escort-account:external-customer-1'
+
+    decision = await service.handle_incoming_message(
+        bot_entity=bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert decision.action == 'skip_pipeline'
+    ap.monitoring_service.record_message.assert_awaited_once_with(
+        bot_id='bot-1',
+        bot_name='客服机器人',
+        pipeline_id='pipeline-1',
+        pipeline_name='默认流程',
+        message_content=json.dumps(
+            [
+                {'type': 'Source'},
+                {'type': 'Plain', 'text': '我补充一下订单号'},
+            ],
+            ensure_ascii=False,
+        ),
+        session_id='person_escort-account:external-customer-1',
+        status='success',
+        level='info',
+        platform='wecomweb',
+        user_id='external-customer-1',
+        user_name='客户A',
+        role='user',
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_message_records_user_message_when_keyword_handoff_triggers_pending_manual():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    ap = Mock()
+    ap.monitoring_service.record_message = AsyncMock()
+    ap.monitoring_service.update_session_activity = AsyncMock(return_value=True)
+
+    service = ServiceDeskService(ap)
+    service._touch_session = AsyncMock(
+        return_value={
+            'session_id': 'person_escort-account:external-customer-2',
+            'mode': 'ai_hosted',
+            'queue_status': 'ai',
+            'manual_claimed_at': None,
+            'silent_since': None,
+        }
+    )
+    service.get_bot_config = AsyncMock(
+        return_value={'enabled': True, 'handoff_keywords': ['人工']}
+    )
+    service.list_materials = AsyncMock(return_value=[])
+    service._update_session_state = AsyncMock()
+
+    bot_entity = SimpleNamespace(
+        adapter='wecomweb',
+        uuid='bot-1',
+        name='客服机器人',
+        use_pipeline_uuid='pipeline-1',
+        use_pipeline_name='默认流程',
+    )
+    event = SimpleNamespace(
+        message_chain=_FakeMessageChain('我要人工处理'),
+        source_platform_object=SimpleNamespace(),
+        sender=SimpleNamespace(id='customer-2', nickname='客户B'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'escort-account',
+        'external_user_id': 'external-customer-2',
+        'last_message_id': 'msg-2',
+    }
+    adapter.get_launcher_id.return_value = 'escort-account:external-customer-2'
+
+    decision = await service.handle_incoming_message(
+        bot_entity=bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert decision.action == 'skip_pipeline'
+    assert decision.reason == 'pending_manual'
+    service._update_session_state.assert_awaited_once_with(
+        'person_escort-account:external-customer-2',
+        mode='manual',
+        queue_status='pending_manual',
+        handoff_reason='keyword',
+    )
+    ap.monitoring_service.record_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_message_records_user_message_when_material_reply_matches():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    ap = Mock()
+    ap.monitoring_service.record_message = AsyncMock()
+    ap.monitoring_service.update_session_activity = AsyncMock(return_value=True)
+
+    service = ServiceDeskService(ap)
+    service._touch_session = AsyncMock(
+        return_value={
+            'session_id': 'person_escort-account:external-customer-3',
+            'mode': 'ai_hosted',
+            'queue_status': 'ai',
+            'manual_claimed_at': None,
+            'silent_since': None,
+        }
+    )
+    service.get_bot_config = AsyncMock(return_value={'enabled': True})
+    service.list_materials = AsyncMock(
+        return_value=[
+            {
+                'title': '下载链接',
+                'priority': 1,
+                'trigger_keywords': ['下载'],
+                'reply_text': '点击这里下载',
+                'enabled': True,
+            }
+        ]
+    )
+
+    bot_entity = SimpleNamespace(
+        adapter='wecomweb',
+        uuid='bot-1',
+        name='客服机器人',
+        use_pipeline_uuid='pipeline-1',
+        use_pipeline_name='默认流程',
+    )
+    event = SimpleNamespace(
+        message_chain=_FakeMessageChain('我要下载地址'),
+        source_platform_object=SimpleNamespace(),
+        sender=SimpleNamespace(id='customer-3', nickname='客户C'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'escort-account',
+        'external_user_id': 'external-customer-3',
+        'last_message_id': 'msg-3',
+    }
+    adapter.get_launcher_id.return_value = 'escort-account:external-customer-3'
+
+    decision = await service.handle_incoming_message(
+        bot_entity=bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert decision.action == 'send_material'
+    assert decision.reason == 'material'
+    assert decision.material['reply_text'] == '点击这里下载'
+    ap.monitoring_service.record_message.assert_awaited_once()

@@ -330,7 +330,7 @@ const enUS = {
       noSessions: 'No sessions match the current filter',
       noSessionSelected: 'Select a session from the left to start handling it',
       noSessionSelectedDescription:
-        'V1 focuses on claiming and manual replies. Full message timeline can follow later.',
+        'Select a session to review chat history, claim it, and send a manual reply.',
       sessionId: 'Session ID',
       pipeline: 'Pipeline',
       botName: 'Bot',
@@ -362,10 +362,10 @@ const enUS = {
       sendReply: 'Send Manual Reply',
       replySuccess: 'Manual reply sent',
       replyError: 'Failed to send manual reply',
-      timelineTitle: 'Message Timeline',
+      timelineTitle: 'Conversation',
       timelineDescription:
-        'Aggregate user messages and operator replies for fast context review.',
-      noTimeline: 'No timeline messages for this session yet',
+        'Show locally captured customer messages and operator replies so agents can pick up the context quickly.',
+      noTimeline: 'No chat history is available for this session yet',
       timelineUser: 'User',
       timelineAssistant: 'Operator',
       quickRepliesTitle: 'Quick Replies',
@@ -373,9 +373,9 @@ const enUS = {
         'Insert common phrases and links from enabled materials. Operators still review before sending.',
       noQuickReplies: 'No quick replies are available for this bot yet',
       quickRepliesLoadError: 'Failed to load quick replies',
-      detailTitle: 'Handling Panel',
+      detailTitle: 'Conversation View',
       detailDescription:
-        'Focus on takeover status and reply actions without jumping across multiple dialogs.',
+        'Review the chat first, then decide whether to claim, return to AI, or send a manual reply.',
       detailLoadError: 'Failed to load session detail',
     },
     config: {

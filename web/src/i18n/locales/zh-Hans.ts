@@ -318,7 +318,7 @@ const zhHans = {
       noSessions: '当前筛选条件下没有会话',
       noSessionSelected: '从左侧选择一个会话开始处理',
       noSessionSelectedDescription:
-        'V1 先提供认领与人工回复能力，消息流详情后续再补充。',
+        '选择左侧会话后，可直接查看聊天记录、认领并发送人工回复。',
       sessionId: '会话 ID',
       pipeline: '流水线',
       botName: '客服号',
@@ -348,10 +348,10 @@ const zhHans = {
       sendReply: '发送人工回复',
       replySuccess: '人工回复已发送',
       replyError: '发送人工回复失败',
-      timelineTitle: '消息时间线',
+      timelineTitle: '聊天记录',
       timelineDescription:
-        '聚合当前会话的用户消息和客服回复，用于快速回看上下文。',
-      noTimeline: '当前会话还没有时间线消息',
+        '直接展示本地已接收的客户消息与客服回复，方便人工接手前快速补上下文。',
+      noTimeline: '当前会话还没有可展示的聊天记录',
       timelineUser: '用户',
       timelineAssistant: '客服',
       quickRepliesTitle: '快捷回复',
@@ -359,9 +359,9 @@ const zhHans = {
         '从启用素材中快速插入常用话术和链接，仍需人工确认后发送。',
       noQuickReplies: '当前客服号还没有可用的快捷回复',
       quickRepliesLoadError: '加载快捷回复失败',
-      detailTitle: '处理面板',
+      detailTitle: '会话记录',
       detailDescription:
-        '聚焦当前会话的接管状态和回复操作，避免客服在多个弹窗之间切换。',
+        '先看历史聊天，再决定认领、返回 AI 或发送人工回复。',
       detailLoadError: '加载会话详情失败',
     },
     config: {

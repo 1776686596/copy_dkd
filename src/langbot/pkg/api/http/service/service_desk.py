@@ -151,6 +151,12 @@ class ServiceDeskService:
         }
 
     @staticmethod
+    def _serialize_message_content(message_chain) -> str:
+        if hasattr(message_chain, 'model_dump'):
+            return json.dumps(message_chain.model_dump(), ensure_ascii=False)
+        return str(message_chain or '')
+
+    @staticmethod
     def _compact_preview_text(value: str, limit: int = 120) -> str:
         normalized = re.sub(r'\s+', ' ', value).strip()
         if len(normalized) <= limit:
@@ -299,6 +305,66 @@ class ServiceDeskService:
         adapter_name = getattr(getattr(runtime_bot, 'bot_entity', None), 'adapter', 'unknown')
         raise ValueError(f'service desk reply is not supported for adapter: {adapter_name}')
 
+    async def _record_intercepted_customer_message(
+        self,
+        *,
+        bot_entity,
+        event,
+        session_id: str,
+        context: dict[str, str],
+        pipeline_uuid: str | None = None,
+    ) -> None:
+        monitoring_service = getattr(self.ap, 'monitoring_service', None)
+        if monitoring_service is None or not hasattr(monitoring_service, 'record_message'):
+            return
+
+        pipeline_id = pipeline_uuid or getattr(bot_entity, 'use_pipeline_uuid', '') or ''
+        pipeline_name = getattr(bot_entity, 'use_pipeline_name', '') or pipeline_id
+        bot_name = getattr(bot_entity, 'name', None) or getattr(bot_entity, 'uuid', '')
+        sender_name = self._get_sender_name(event)
+        user_id = str(context.get('external_user_id') or getattr(getattr(event, 'sender', None), 'id', '') or '')
+
+        try:
+            await monitoring_service.record_message(
+                bot_id=bot_entity.uuid,
+                bot_name=bot_name,
+                pipeline_id=pipeline_id,
+                pipeline_name=pipeline_name,
+                message_content=self._serialize_message_content(
+                    getattr(event, 'message_chain', '')
+                ),
+                session_id=session_id,
+                status='success',
+                level='info',
+                platform=getattr(bot_entity, 'adapter', None),
+                user_id=user_id,
+                user_name=sender_name,
+                role='user',
+            )
+
+            if hasattr(monitoring_service, 'update_session_activity'):
+                session_updated = await monitoring_service.update_session_activity(
+                    session_id,
+                    pipeline_id=pipeline_id,
+                    pipeline_name=pipeline_name,
+                )
+                if (
+                    not session_updated
+                    and hasattr(monitoring_service, 'record_session_start')
+                ):
+                    await monitoring_service.record_session_start(
+                        session_id=session_id,
+                        bot_id=bot_entity.uuid,
+                        bot_name=bot_name,
+                        pipeline_id=pipeline_id,
+                        pipeline_name=pipeline_name,
+                        platform=getattr(bot_entity, 'adapter', None),
+                        user_id=user_id or None,
+                        user_name=sender_name,
+                    )
+        except Exception:
+            return
+
     async def _get_session(self, session_id: str):
         result = await self.ap.persistence_mgr.execute_async(
             sqlalchemy.select(persistence_service_desk.ServiceDeskSession).where(
@@ -439,11 +505,25 @@ class ServiceDeskService:
             session = await self._get_session(session_id)
 
         if self._get_value(session, 'queue_status') == 'manual':
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
+            )
             return ServiceDeskDecision(action='skip_pipeline', reason='manual')
 
         materials = await self.list_materials(bot_entity.uuid)
         matched_material = match_material(str(getattr(event, 'message_chain', '')), materials)
         if matched_material is not None:
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
+            )
             return ServiceDeskDecision(action='send_material', reason='material', material=matched_material)
 
         if (
@@ -459,6 +539,13 @@ class ServiceDeskService:
                 mode='manual',
                 queue_status='pending_manual',
                 handoff_reason='keyword',
+            )
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
             )
             return ServiceDeskDecision(
                 action='skip_pipeline',
