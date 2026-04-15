@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from sqlalchemy.exc import ResourceClosedError
 
 
 class _FakeListResult:
@@ -20,22 +21,41 @@ class _FakeScalarResult:
 
 
 class _FakeSessionScalarRows:
-    def __init__(self, row):
-        self._row = row
+    def __init__(self, result):
+        self._result = result
 
     def first(self):
-        return self._row
+        if self._result._closed:
+            raise ResourceClosedError('This result object is closed.')
+        self._result._closed = True
+        return self._result._row
+
+
+class _FakeRow:
+    def __init__(self, data):
+        self._data = data
+        self._mapping = data
+
+    def __getattr__(self, item):
+        try:
+            return self._data[item]
+        except KeyError as exc:
+            raise AttributeError(item) from exc
 
 
 class _FakeSessionQueryResult:
     def __init__(self, row):
         self._row = row
+        self._closed = False
 
     def first(self):
-        return self._row['session_id']
+        if self._closed:
+            raise ResourceClosedError('This result object is closed.')
+        self._closed = True
+        return self._row
 
     def scalars(self):
-        return _FakeSessionScalarRows(self._row)
+        return _FakeSessionScalarRows(self)
 
 
 @pytest.mark.asyncio
@@ -151,23 +171,25 @@ async def test_get_session_detail_returns_messages_and_overlay():
 
 
 @pytest.mark.asyncio
-async def test_get_session_detail_uses_scalar_row_when_result_first_is_primary_key():
+async def test_get_session_detail_uses_first_row_without_consuming_result_twice():
     from types import SimpleNamespace
 
     from langbot.pkg.api.http.service.service_desk import ServiceDeskService
 
-    session_row = {
+    session_row = _FakeRow({
         'session_id': 'person_ou_demo_1',
         'bot_uuid': 'bot-1',
         'pipeline_uuid': 'pipeline-1',
         'handoff_reason': None,
-    }
+    })
 
     ap = Mock()
     ap.persistence_mgr.execute_async = AsyncMock(
         return_value=_FakeSessionQueryResult(session_row)
     )
-    ap.persistence_mgr.serialize_model = Mock(side_effect=lambda _model, row: row)
+    ap.persistence_mgr.serialize_model = Mock(
+        side_effect=lambda _model, row: dict(row._mapping) if hasattr(row, '_mapping') else row
+    )
     ap.monitoring_service.get_messages = AsyncMock(return_value=([], 0))
     ap.platform_mgr.get_bot_by_uuid = AsyncMock(
         return_value=SimpleNamespace(bot_entity=SimpleNamespace(name='客服机器人'))

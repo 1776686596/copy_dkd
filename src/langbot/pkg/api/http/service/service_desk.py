@@ -48,9 +48,18 @@ class ServiceDeskService:
         if row is None:
             return None
         if hasattr(row, '_mapping'):
-            return next(iter(row._mapping.values()))
+            mapping = row._mapping
+            if len(mapping) == 1:
+                value = next(iter(mapping.values()))
+                if hasattr(value, '__table__') or hasattr(value, '__mapper__'):
+                    return value
+            return row
         if isinstance(row, tuple):
-            return row[0]
+            if len(row) == 1:
+                value = row[0]
+                if hasattr(value, '__table__') or hasattr(value, '__mapper__'):
+                    return value
+            return row
         return row
 
     @staticmethod
@@ -160,18 +169,7 @@ class ServiceDeskService:
                 persistence_service_desk.ServiceDeskSession.session_id == session_id
             )
         )
-        row = self._unwrap_model(result.first())
-        if row is not None and not isinstance(row, str):
-            return row
-
-        if isinstance(row, str) and hasattr(result, 'scalars'):
-            scalar_rows = result.scalars()
-            if hasattr(scalar_rows, 'first'):
-                scalar_row = scalar_rows.first()
-                if scalar_row is not None:
-                    return scalar_row
-
-        return row
+        return self._unwrap_model(result.first())
 
     async def _update_session_state(self, session_id: str, **values) -> None:
         await self.ap.persistence_mgr.execute_async(
