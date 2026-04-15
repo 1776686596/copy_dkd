@@ -60,6 +60,9 @@ class PluginRuntimeConnector:
     is_enable_plugin: bool = True
     """Mark if the plugin system is enabled"""
 
+    runtime_connected: bool = False
+    """Mark if the plugin runtime is currently available"""
+
     def __init__(
         self,
         ap: app.Application,
@@ -70,6 +73,10 @@ class PluginRuntimeConnector:
         self.ap = ap
         self.runtime_disconnect_callback = runtime_disconnect_callback
         self.is_enable_plugin = self.ap.instance_config.data.get('plugin', {}).get('enable', True)
+        self.runtime_connected = False
+
+    def is_runtime_available(self) -> bool:
+        return self.is_enable_plugin and self.runtime_connected and hasattr(self, 'handler')
 
     async def heartbeat_loop(self):
         while True:
@@ -89,6 +96,7 @@ class PluginRuntimeConnector:
             async def disconnect_callback(
                 rchandler: handler.RuntimeConnectionHandler,
             ) -> bool:
+                self.runtime_connected = False
                 if platform.get_platform() == 'docker' or platform.use_websocket_to_connect_plugin_runtime():
                     self.ap.logger.error('Disconnected from plugin runtime, trying to reconnect...')
                     await self.runtime_disconnect_callback(self)
@@ -103,8 +111,10 @@ class PluginRuntimeConnector:
 
             self.handler_task = asyncio.create_task(self.handler.run())
             _ = await self.handler.ping()
+            self.runtime_connected = True
             self.ap.logger.info('Connected to plugin runtime.')
             await self.handler_task
+            self.runtime_connected = False
 
         task: asyncio.Task | None = None
 
@@ -447,6 +457,10 @@ class PluginRuntimeConnector:
         if not self.is_enable_plugin:
             return event_ctx
 
+        if not self.is_runtime_available():
+            self.ap.logger.warning('Plugin runtime unavailable, skip emit_event and continue pipeline.')
+            return event_ctx
+
         # Pass include_plugins to runtime for filtering
         event_ctx_result = await self.handler.emit_event(
             event_ctx.model_dump(serialize_as_any=False), include_plugins=bound_plugins
@@ -458,6 +472,10 @@ class PluginRuntimeConnector:
 
     async def list_tools(self, bound_plugins: list[str] | None = None) -> list[ComponentManifest]:
         if not self.is_enable_plugin:
+            return []
+
+        if not self.is_runtime_available():
+            self.ap.logger.warning('Plugin runtime unavailable, return empty plugin tools.')
             return []
 
         # Pass include_plugins to runtime for filtering
@@ -485,6 +503,10 @@ class PluginRuntimeConnector:
 
     async def list_commands(self, bound_plugins: list[str] | None = None) -> list[ComponentManifest]:
         if not self.is_enable_plugin:
+            return []
+
+        if not self.is_runtime_available():
+            self.ap.logger.warning('Plugin runtime unavailable, return empty plugin commands.')
             return []
 
         # Pass include_plugins to runtime for filtering
