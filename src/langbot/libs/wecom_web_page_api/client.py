@@ -259,6 +259,7 @@ class WecomWebPageClient:
             self._browser_context = await self._playwright.chromium.launch_persistent_context(**launch_kwargs)
 
         self._page = self._browser_context.pages[0] if self._browser_context.pages else await self._browser_context.new_page()
+        await self._browser_context.add_init_script(self._stealth_script())
         await self._page.goto(self.workbench_url, wait_until='domcontentloaded')
 
     def _resolve_browser_executable_for_launch(self) -> str | None:
@@ -277,6 +278,24 @@ class WecomWebPageClient:
         launch_kwargs: dict[str, Any] = {
             'user_data_dir': self.storage_state_dir,
             'headless': self.headless if headless is None else headless,
+            'user_agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/126.0.0.0 Safari/537.36'
+            ),
+            'viewport': {'width': 1280, 'height': 800},
+            'screen': {'width': 1920, 'height': 1080},
+            'locale': 'zh-CN',
+            'timezone_id': 'Asia/Shanghai',
+            'color_scheme': 'light',
+            'args': [
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-default-browser-check',
+            ],
+            'ignore_default_args': ['--enable-automation'],
         }
         if executable_path:
             launch_kwargs['executable_path'] = executable_path
@@ -302,6 +321,56 @@ class WecomWebPageClient:
             if executable_path:
                 return executable_path
         return None
+
+    @staticmethod
+    def _stealth_script() -> str:
+        return """
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        delete navigator.__proto__.webdriver;
+
+        if (!window.chrome) {
+            window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+        }
+
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => {
+                const a = [
+                    { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                    { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                    { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+                ];
+                a.refresh = () => {};
+                return a;
+            },
+        });
+
+        Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US', 'en'] });
+
+        const _origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+        window.navigator.permissions.query = (p) =>
+            p.name === 'notifications'
+                ? Promise.resolve({ state: Notification.permission })
+                : _origQuery(p);
+
+        const _gl = WebGLRenderingContext.prototype.getParameter;
+        WebGLRenderingContext.prototype.getParameter = function(p) {
+            if (p === 37445) return 'Google Inc. (Intel)';
+            if (p === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 630, OpenGL 4.5)';
+            return _gl.call(this, p);
+        };
+        const _gl2 = WebGL2RenderingContext.prototype.getParameter;
+        WebGL2RenderingContext.prototype.getParameter = function(p) {
+            if (p === 37445) return 'Google Inc. (Intel)';
+            if (p === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 630, OpenGL 4.5)';
+            return _gl2.call(this, p);
+        };
+
+        if (navigator.connection) {
+            Object.defineProperty(navigator.connection, 'rtt', { get: () => 50 });
+        }
+        if (window.outerHeight === 0) Object.defineProperty(window, 'outerHeight', { get: () => 800 });
+        if (window.outerWidth === 0) Object.defineProperty(window, 'outerWidth', { get: () => 1280 });
+        """
 
     async def _is_login_required(self) -> bool:
         qr_locator = await self._find_first_visible_locator(self.selectors['login_qr'])

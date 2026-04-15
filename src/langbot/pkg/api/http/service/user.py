@@ -6,6 +6,7 @@ import jwt
 import datetime
 import typing
 import asyncio
+import secrets
 
 from ....core import app
 from ....entity.persistence import user
@@ -74,6 +75,21 @@ class UserService:
         ph.verify(user_obj.password, password)
 
         return await self.generate_jwt_token(user_email)
+
+    async def authenticate_with_demo_key(self, login_key: str) -> str:
+        configured_key = self.ap.instance_config.data.get('system', {}).get('demo_login_key', '').strip()
+
+        if not configured_key:
+            raise ValueError('Demo login key is not configured')
+
+        if not login_key or not secrets.compare_digest(login_key, configured_key):
+            raise ValueError('Invalid demo login key')
+
+        user_obj = await self.get_first_user()
+        if user_obj is None:
+            raise ValueError('System not initialized')
+
+        return await self.generate_jwt_token(user_obj.user)
 
     async def generate_jwt_token(self, user_email: str) -> str:
         jwt_secret = self.ap.instance_config.data['system']['jwt']['secret']
@@ -226,7 +242,9 @@ class UserService:
 
     async def get_first_user(self) -> user.User | None:
         """Get the first user (for single-user mode)"""
-        result = await self.ap.persistence_mgr.execute_async(sqlalchemy.select(user.User).limit(1))
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(user.User).order_by(user.User.id.asc()).limit(1)
+        )
         result_list = result.all()
         return result_list[0] if result_list else None
 

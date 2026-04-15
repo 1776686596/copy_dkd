@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime
+import json
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -34,6 +36,7 @@ def match_material(message_text: str, materials: list[dict]) -> dict | None:
 
 
 QUICK_REPLY_TYPES = {'quick_reply', 'download_link', 'gift_pack'}
+SERVICE_DESK_TIMELINE_LIMIT = 1000
 
 
 class ServiceDeskService:
@@ -71,97 +74,14 @@ class ServiceDeskService:
             return session.get(key, default)
         return getattr(session, key, default)
 
-    async def _load_messages_by_external_user(
-        self,
-        *,
-        bot_uuid: str,
-        external_user_id: str,
-        limit: int = 200,
-    ) -> list[dict]:
-        if not bot_uuid or not external_user_id:
-            return []
-
-        result = await self.ap.persistence_mgr.execute_async(
-            sqlalchemy.select(persistence_monitoring.MonitoringMessage)
-            .where(
-                persistence_monitoring.MonitoringMessage.bot_id == bot_uuid,
-                persistence_monitoring.MonitoringMessage.user_id == external_user_id,
-            )
-            .order_by(
-                persistence_monitoring.MonitoringMessage.timestamp.asc(),
-                persistence_monitoring.MonitoringMessage.id.asc(),
-            )
-            .limit(limit)
-        )
-
-        messages: list[dict] = []
-        for row in result.all():
-            msg = row[0] if isinstance(row, tuple) else self._unwrap_model(row)
-            serialized_msg = self.ap.persistence_mgr.serialize_model(
-                persistence_monitoring.MonitoringMessage,
-                msg,
-            )
-            messages.append(serialized_msg)
-
-        return messages
-
     @staticmethod
-    def _get_message_key(message: dict) -> str:
-        message_id = str(message.get('id', '') or '')
-        if message_id:
-            return message_id
-
-        return '::'.join(
-            [
-                str(message.get('session_id', '') or ''),
-                str(message.get('timestamp', '') or ''),
-                str(message.get('role', '') or ''),
-                str(message.get('message_content', '') or ''),
-            ]
-        )
-
-    @staticmethod
-    def _parse_message_timestamp(value) -> datetime.datetime:
-        if isinstance(value, datetime.datetime):
-            if value.tzinfo is not None:
-                return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-            return value
-
-        if isinstance(value, str) and value:
-            normalized = value.replace('Z', '+00:00')
-            try:
-                parsed = datetime.datetime.fromisoformat(normalized)
-            except ValueError:
-                return datetime.datetime.min
-            if parsed.tzinfo is not None:
-                return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-            return parsed
-
-        return datetime.datetime.min
-
-    @classmethod
-    def _merge_timeline_messages(
-        cls,
-        *message_groups: list[dict],
-        limit: int = 200,
-    ) -> list[dict]:
-        merged: dict[str, dict] = {}
-        for group in message_groups:
-            for message in group:
-                if not message:
-                    continue
-                merged[cls._get_message_key(message)] = message
-
-        sorted_messages = sorted(
-            merged.values(),
-            key=lambda item: (
-                cls._parse_message_timestamp(item.get('timestamp')),
-                str(item.get('id', '') or ''),
-            ),
-        )
-        if limit > 0 and len(sorted_messages) > limit:
-            return sorted_messages[-limit:]
-        return sorted_messages
+    def _get_row_value(row, key: str, default=None):
+        if row is None:
+            return default
+        mapping = getattr(row, '_mapping', None)
+        if mapping is not None:
+            return mapping.get(key, default)
+        return ServiceDeskService._get_value(row, key, default)
 
     @staticmethod
     def _get_sender_name(event) -> str | None:
@@ -231,6 +151,224 @@ class ServiceDeskService:
             'last_message_id': str(ServiceDeskService._get_value(source, 'last_message_id', '') or ''),
         }
 
+    @staticmethod
+    def _serialize_message_content(message_chain) -> str:
+        if hasattr(message_chain, 'model_dump'):
+            return json.dumps(message_chain.model_dump(), ensure_ascii=False)
+        return str(message_chain or '')
+
+    @staticmethod
+    def _compact_preview_text(value: str, limit: int = 120) -> str:
+        normalized = re.sub(r'\s+', ' ', value).strip()
+        if len(normalized) <= limit:
+            return normalized
+        return f'{normalized[: limit - 3].rstrip()}...'
+
+    @classmethod
+    def _extract_preview_component_text(cls, component: dict) -> str:
+        component_type = str(component.get('type') or '')
+
+        if component_type == 'Plain':
+            return str(component.get('text') or '')
+        if component_type == 'At':
+            display = component.get('display') or component.get('target') or ''
+            return f'@{display}' if display else '@'
+        if component_type == 'AtAll':
+            return '@全体成员'
+        if component_type == 'Image':
+            return '[图片]'
+        if component_type == 'Voice':
+            length = component.get('length')
+            return f'[语音 {length}s]' if length else '[语音]'
+        if component_type == 'File':
+            name = component.get('name')
+            return f'[文件 {name}]' if name else '[文件]'
+        if component_type == 'Quote':
+            return '[引用]'
+        if component_type == 'Forward':
+            return '[转发消息]'
+        if component_type == 'Source':
+            return ''
+        if component_type:
+            return f'[{component_type}]'
+        return ''
+
+    @classmethod
+    def _build_message_preview(cls, message_content: str | None) -> str | None:
+        if not message_content:
+            return None
+
+        preview_text = message_content
+        try:
+            parsed = json.loads(message_content)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = None
+
+        if isinstance(parsed, list):
+            parts = []
+            for item in parsed:
+                if isinstance(item, dict):
+                    component_text = cls._extract_preview_component_text(item)
+                    if component_text:
+                        parts.append(component_text)
+            preview_text = ''.join(parts)
+        elif isinstance(parsed, dict):
+            preview_text = cls._extract_preview_component_text(parsed)
+        elif isinstance(parsed, str):
+            preview_text = parsed
+
+        compacted = cls._compact_preview_text(str(preview_text))
+        return compacted or None
+
+    @staticmethod
+    def _normalize_message_timestamp(value) -> tuple[float, str]:
+        if value is None:
+            return (0.0, '')
+        if isinstance(value, datetime.datetime):
+            return (value.timestamp(), value.isoformat())
+        if hasattr(value, 'timestamp') and hasattr(value, 'isoformat'):
+            return (float(value.timestamp()), value.isoformat())
+        if isinstance(value, str):
+            normalized = value.replace('Z', '+00:00')
+            try:
+                parsed = datetime.datetime.fromisoformat(normalized)
+            except ValueError:
+                return (0.0, value)
+            return (parsed.timestamp(), value)
+        return (0.0, str(value))
+
+    @classmethod
+    def _build_timeline_message_key(cls, message: dict) -> str:
+        message_id = str(message.get('id') or '').strip()
+        if message_id:
+            return message_id
+
+        _timestamp_value, timestamp_text = cls._normalize_message_timestamp(
+            message.get('timestamp')
+        )
+        return '::'.join(
+            [
+                str(message.get('session_id') or ''),
+                timestamp_text,
+                str(message.get('role') or ''),
+                str(message.get('message_content') or ''),
+            ]
+        )
+
+    @classmethod
+    def _merge_timeline_messages(cls, *message_groups: list[dict]) -> list[dict]:
+        merged: dict[str, dict] = {}
+        for group in message_groups:
+            for message in group or []:
+                if not isinstance(message, dict):
+                    continue
+                key = cls._build_timeline_message_key(message)
+                if key not in merged:
+                    merged[key] = message
+
+        return sorted(
+            merged.values(),
+            key=lambda item: (
+                cls._normalize_message_timestamp(item.get('timestamp'))[0],
+                str(item.get('id') or ''),
+            ),
+        )
+
+    async def _load_last_message_previews(
+        self,
+        session_ids: list[str],
+    ) -> dict[str, dict]:
+        if not session_ids:
+            return {}
+
+        latest_timestamp_subquery = (
+            sqlalchemy.select(
+                persistence_monitoring.MonitoringMessage.session_id.label('session_id'),
+                sqlalchemy.func.max(
+                    persistence_monitoring.MonitoringMessage.timestamp
+                ).label('latest_timestamp'),
+            )
+            .where(persistence_monitoring.MonitoringMessage.session_id.in_(session_ids))
+            .group_by(persistence_monitoring.MonitoringMessage.session_id)
+            .subquery()
+        )
+
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(
+                persistence_monitoring.MonitoringMessage.session_id,
+                persistence_monitoring.MonitoringMessage.message_content,
+                persistence_monitoring.MonitoringMessage.role,
+                persistence_monitoring.MonitoringMessage.timestamp,
+            )
+            .join(
+                latest_timestamp_subquery,
+                sqlalchemy.and_(
+                    persistence_monitoring.MonitoringMessage.session_id
+                    == latest_timestamp_subquery.c.session_id,
+                    persistence_monitoring.MonitoringMessage.timestamp
+                    == latest_timestamp_subquery.c.latest_timestamp,
+                ),
+            )
+            .order_by(
+                persistence_monitoring.MonitoringMessage.timestamp.desc(),
+                persistence_monitoring.MonitoringMessage.id.desc(),
+            )
+        )
+
+        preview_map: dict[str, dict] = {}
+        for row in result.all():
+            session_id = str(self._get_row_value(row, 'session_id', '') or '')
+            if not session_id or session_id in preview_map:
+                continue
+
+            preview_map[session_id] = {
+                'last_message_preview': self._build_message_preview(
+                    self._get_row_value(row, 'message_content')
+                ),
+                'last_message_role': self._get_row_value(row, 'role'),
+                'last_message_at': (
+                    self._get_row_value(row, 'timestamp').isoformat()
+                    if hasattr(self._get_row_value(row, 'timestamp'), 'isoformat')
+                    else self._get_row_value(row, 'timestamp')
+                ),
+            }
+
+        return preview_map
+
+    async def _load_messages_by_external_user(
+        self,
+        *,
+        bot_uuid: str,
+        external_user_id: str,
+        limit: int = SERVICE_DESK_TIMELINE_LIMIT,
+    ) -> list[dict]:
+        if not bot_uuid or not external_user_id:
+            return []
+
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(persistence_monitoring.MonitoringMessage)
+            .where(
+                persistence_monitoring.MonitoringMessage.bot_id == bot_uuid,
+                persistence_monitoring.MonitoringMessage.user_id == external_user_id,
+            )
+            .order_by(
+                persistence_monitoring.MonitoringMessage.timestamp.asc(),
+                persistence_monitoring.MonitoringMessage.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        messages: list[dict] = []
+        for row in result.all():
+            msg = row[0] if isinstance(row, tuple) else self._unwrap_model(row)
+            serialized_msg = self.ap.persistence_mgr.serialize_model(
+                persistence_monitoring.MonitoringMessage,
+                msg,
+            )
+            messages.append(serialized_msg)
+
+        return messages
+
     async def _send_service_desk_text(
         self,
         *,
@@ -255,6 +393,66 @@ class ServiceDeskService:
 
         adapter_name = getattr(getattr(runtime_bot, 'bot_entity', None), 'adapter', 'unknown')
         raise ValueError(f'service desk reply is not supported for adapter: {adapter_name}')
+
+    async def _record_intercepted_customer_message(
+        self,
+        *,
+        bot_entity,
+        event,
+        session_id: str,
+        context: dict[str, str],
+        pipeline_uuid: str | None = None,
+    ) -> None:
+        monitoring_service = getattr(self.ap, 'monitoring_service', None)
+        if monitoring_service is None or not hasattr(monitoring_service, 'record_message'):
+            return
+
+        pipeline_id = pipeline_uuid or getattr(bot_entity, 'use_pipeline_uuid', '') or ''
+        pipeline_name = getattr(bot_entity, 'use_pipeline_name', '') or pipeline_id
+        bot_name = getattr(bot_entity, 'name', None) or getattr(bot_entity, 'uuid', '')
+        sender_name = self._get_sender_name(event)
+        user_id = str(context.get('external_user_id') or getattr(getattr(event, 'sender', None), 'id', '') or '')
+
+        try:
+            await monitoring_service.record_message(
+                bot_id=bot_entity.uuid,
+                bot_name=bot_name,
+                pipeline_id=pipeline_id,
+                pipeline_name=pipeline_name,
+                message_content=self._serialize_message_content(
+                    getattr(event, 'message_chain', '')
+                ),
+                session_id=session_id,
+                status='success',
+                level='info',
+                platform=getattr(bot_entity, 'adapter', None),
+                user_id=user_id,
+                user_name=sender_name,
+                role='user',
+            )
+
+            if hasattr(monitoring_service, 'update_session_activity'):
+                session_updated = await monitoring_service.update_session_activity(
+                    session_id,
+                    pipeline_id=pipeline_id,
+                    pipeline_name=pipeline_name,
+                )
+                if (
+                    not session_updated
+                    and hasattr(monitoring_service, 'record_session_start')
+                ):
+                    await monitoring_service.record_session_start(
+                        session_id=session_id,
+                        bot_id=bot_entity.uuid,
+                        bot_name=bot_name,
+                        pipeline_id=pipeline_id,
+                        pipeline_name=pipeline_name,
+                        platform=getattr(bot_entity, 'adapter', None),
+                        user_id=user_id or None,
+                        user_name=sender_name,
+                    )
+        except Exception:
+            return
 
     async def _get_session(self, session_id: str):
         result = await self.ap.persistence_mgr.execute_async(
@@ -396,11 +594,25 @@ class ServiceDeskService:
             session = await self._get_session(session_id)
 
         if self._get_value(session, 'queue_status') == 'manual':
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
+            )
             return ServiceDeskDecision(action='skip_pipeline', reason='manual')
 
         materials = await self.list_materials(bot_entity.uuid)
         matched_material = match_material(str(getattr(event, 'message_chain', '')), materials)
         if matched_material is not None:
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
+            )
             return ServiceDeskDecision(action='send_material', reason='material', material=matched_material)
 
         if (
@@ -416,6 +628,13 @@ class ServiceDeskService:
                 mode='manual',
                 queue_status='pending_manual',
                 handoff_reason='keyword',
+            )
+            await self._record_intercepted_customer_message(
+                bot_entity=bot_entity,
+                event=event,
+                session_id=session_id,
+                context=context,
+                pipeline_uuid=pipeline_uuid,
             )
             return ServiceDeskDecision(
                 action='skip_pipeline',
@@ -538,20 +757,19 @@ class ServiceDeskService:
         if monitoring_service is not None and hasattr(monitoring_service, 'get_messages'):
             direct_messages, _ = await monitoring_service.get_messages(
                 session_ids=[session_id],
-                limit=200,
+                limit=SERVICE_DESK_TIMELINE_LIMIT,
                 offset=0,
             )
-        external_messages = await self._load_messages_by_external_user(
+        external_user_messages = await self._load_messages_by_external_user(
             bot_uuid=str(self._get_value(session, 'bot_uuid', '') or ''),
             external_user_id=str(
                 self._get_value(session, 'external_user_id', '') or ''
             ),
-            limit=200,
+            limit=SERVICE_DESK_TIMELINE_LIMIT,
         )
         messages = self._merge_timeline_messages(
-            external_messages,
+            external_user_messages,
             direct_messages,
-            limit=200,
         )
 
         bot_payload = {'uuid': self._get_value(session, 'bot_uuid')}
@@ -722,6 +940,16 @@ class ServiceDeskService:
             self.ap.persistence_mgr.serialize_model(persistence_service_desk.ServiceDeskSession, row)
             for row in result.all()
         ]
+
+        preview_map = await self._load_last_message_previews(
+            [
+                str(item.get('session_id', '') or '')
+                for item in items
+                if item.get('session_id')
+            ]
+        )
+        for item in items:
+            item.update(preview_map.get(str(item.get('session_id', '') or ''), {}))
 
         return items, total
 

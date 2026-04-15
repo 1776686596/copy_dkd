@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ServiceDeskAssistDraft,
@@ -16,9 +16,14 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import MessageTimeline from './MessageTimeline';
 import QuickReplyPanel from './QuickReplyPanel';
+import { mergeServiceDeskTimelineMessages } from '../utils/timelineMessages.js';
+
+const SERVICE_DESK_TIMELINE_LIMIT = 1000;
 
 function formatDateTime(value?: string | null) {
   if (!value) return '--';
@@ -28,11 +33,13 @@ function formatDateTime(value?: string | null) {
 interface SessionDetailProps {
   session: ServiceDeskSession | null;
   onRefresh: (showError?: boolean) => Promise<void>;
+  compactMode?: boolean;
 }
 
 export default function SessionDetail({
   session,
   onRefresh,
+  compactMode = false,
 }: SessionDetailProps) {
   const { t } = useTranslation();
   const [claiming, setClaiming] = useState(false);
@@ -45,64 +52,18 @@ export default function SessionDetail({
   const [assistDraft, setAssistDraft] = useState<ServiceDeskAssistDraft | null>(
     null,
   );
+  const [assistDraftVisible, setAssistDraftVisible] = useState(false);
   const [detail, setDetail] = useState<ServiceDeskSessionDetail | null>(null);
 
   const detailSession = detail?.session ?? session;
-
-  const detailRows = useMemo(() => {
-    if (!detailSession) return [];
-
-    return [
-      [t('serviceDesk.workbench.sessionId'), detailSession.session_id],
-      [t('serviceDesk.workbench.pipeline'), detailSession.pipeline_uuid],
-      [t('serviceDesk.workbench.sourceEntry'), detailSession.source_entry_id],
-      [t('serviceDesk.workbench.externalUser'), detailSession.external_user_id],
-      [
-        t('serviceDesk.workbench.claimedBy'),
-        detailSession.claimed_by_user_name || '--',
-      ],
-      [
-        t('serviceDesk.workbench.updatedAt'),
-        formatDateTime(detailSession.updated_at),
-      ],
-      [
-        t('serviceDesk.workbench.handoffReason'),
-        detailSession.handoff_reason || '--',
-      ],
-      [
-        t('serviceDesk.workbench.botName'),
-        detail?.bot.name || detail?.bot.uuid || '--',
-      ],
-    ];
-  }, [detail, detailSession, t]);
-
   const canReply = session?.queue_status === 'manual';
   const canRelease = session?.queue_status === 'manual';
   const canReturnToAi = session?.queue_status !== 'ai';
 
-  const loadDetail = useCallback(
-    async (sessionId: string, showError: boolean = true) => {
-      setDetailLoading(true);
-      try {
-        const resp = await httpClient.getServiceDeskSessionDetail(sessionId);
-        setDetail(resp);
-        return resp;
-      } catch (error) {
-        console.error('Failed to load service desk session detail:', error);
-        if (showError) {
-          toast.error(t('serviceDesk.workbench.detailLoadError'));
-        }
-        return null;
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [t],
-  );
-
   useEffect(() => {
     setReplyText('');
     setAssistDraft(null);
+    setAssistDraftVisible(false);
     setDetail(null);
   }, [session?.session_id]);
 
@@ -115,12 +76,28 @@ export default function SessionDetail({
     let active = true;
 
     const loadDetail = async () => {
+      setDetailLoading(true);
       try {
-        const resp = await httpClient.getServiceDeskSessionDetail(
-          session.session_id,
-        );
+        const [resp, monitoringResp] = await Promise.all([
+          httpClient.getServiceDeskSessionDetail(session.session_id),
+          httpClient
+            .getSessionMessages(session.session_id, SERVICE_DESK_TIMELINE_LIMIT, 0)
+            .catch((error) => {
+              console.error(
+                'Failed to load monitoring messages for service desk session:',
+                error,
+              );
+              return null;
+            }),
+        ]);
         if (!active) return;
-        setDetail(resp);
+        setDetail({
+          ...resp,
+          messages: mergeServiceDeskTimelineMessages(
+            resp.messages,
+            monitoringResp?.messages ?? [],
+          ),
+        });
       } catch (error) {
         console.error('Failed to load service desk session detail:', error);
         if (active) {
@@ -133,7 +110,6 @@ export default function SessionDetail({
       }
     };
 
-    setDetailLoading(true);
     void loadDetail();
 
     return () => {
@@ -160,15 +136,13 @@ export default function SessionDetail({
     if (!session || !replyText.trim() || !canReply) return;
     setSending(true);
     try {
-      const currentSessionId = session.session_id;
       await httpClient.replyServiceDeskSession(
-        currentSessionId,
+        session.session_id,
         replyText.trim(),
       );
       setReplyText('');
-      await loadDetail(currentSessionId, false);
       toast.success(t('serviceDesk.workbench.replySuccess'));
-      await onRefresh(false);
+      await onRefresh();
     } catch (error) {
       console.error('Failed to reply service desk session:', error);
       toast.error(t('serviceDesk.workbench.replyError'));
@@ -179,25 +153,37 @@ export default function SessionDetail({
 
   const handleGenerateAssistDraft = async () => {
     if (!session) return;
+    if (assistDraft && assistDraftVisible) {
+      setAssistDraftVisible(false);
+      return;
+    }
+    if (assistDraft) {
+      setAssistDraftVisible(true);
+      return;
+    }
     setGeneratingDraft(true);
     try {
-      await httpClient.setServiceDeskSessionMode(
-        session.session_id,
-        'ai_assist',
-      );
       const resp = await httpClient.generateServiceDeskAssistDraft(
         session.session_id,
       );
       setAssistDraft(resp.draft);
-      setReplyText(resp.draft.reply_text);
+      setAssistDraftVisible(true);
       toast.success(t('serviceDesk.workbench.assistDraftSuccess'));
-      await onRefresh(false);
     } catch (error) {
       console.error('Failed to generate assist draft:', error);
       toast.error(t('serviceDesk.workbench.assistDraftError'));
     } finally {
       setGeneratingDraft(false);
     }
+  };
+
+  const handleInsertAssistDraft = () => {
+    if (!assistDraft?.reply_text) return;
+    setReplyText((prev) =>
+      prev.trim()
+        ? `${prev.trim()}\n${assistDraft.reply_text}`
+        : assistDraft.reply_text,
+    );
   };
 
   const handleRelease = async () => {
@@ -236,7 +222,7 @@ export default function SessionDetail({
 
   if (!session) {
     return (
-      <Card className="flex min-h-[420px] flex-col justify-center rounded-3xl border-dashed">
+      <Card className="flex h-full min-h-0 min-h-[420px] flex-col justify-center rounded-3xl border-dashed xl:min-h-0">
         <CardHeader className="items-center text-center">
           <CardTitle>{t('serviceDesk.workbench.noSessionSelected')}</CardTitle>
           <CardDescription className="max-w-md">
@@ -248,14 +234,48 @@ export default function SessionDetail({
   }
 
   return (
-    <Card className="flex flex-col rounded-3xl">
-      <CardHeader className="border-b">
+    <Card className="flex h-full min-h-0 min-h-[560px] flex-col overflow-hidden rounded-3xl xl:min-h-0">
+      <CardHeader
+        className={cn(
+          'border-b',
+          compactMode ? 'bg-background/90 py-4' : 'bg-muted/15',
+        )}
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle>{t('serviceDesk.workbench.detailTitle')}</CardTitle>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>
+                {detailSession?.external_user_id || session.session_id}
+              </CardTitle>
+              {detail?.bot.name || detail?.bot.uuid ? (
+                <Badge variant="outline">
+                  {detail?.bot.name || detail?.bot.uuid}
+                </Badge>
+              ) : null}
+            </div>
             <CardDescription>
-              {t('serviceDesk.workbench.detailDescription')}
+              {detailSession?.source_entry_id
+                ? `${t('serviceDesk.workbench.sourceEntry')} · ${detailSession.source_entry_id}`
+                : t('serviceDesk.workbench.detailDescription')}
             </CardDescription>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {t('serviceDesk.workbench.updatedAt')} ·{' '}
+                {formatDateTime(detailSession?.updated_at)}
+              </span>
+              {detailSession?.claimed_by_user_name ? (
+                <span>
+                  {t('serviceDesk.workbench.claimedBy')} ·{' '}
+                  {detailSession.claimed_by_user_name}
+                </span>
+              ) : null}
+              {detailSession?.handoff_reason ? (
+                <span>
+                  {t('serviceDesk.workbench.handoffReason')} ·{' '}
+                  {detailSession.handoff_reason}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">
@@ -268,138 +288,149 @@ export default function SessionDetail({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-6 pt-6">
-        <div className="grid gap-3 md:grid-cols-2">
-          {detailRows.map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-2xl border border-border/70 bg-muted/25 px-4 py-3"
-            >
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-1 break-all text-sm font-medium">{value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-0 p-0">
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 flex-col px-6',
+            compactMode ? 'gap-4 py-4' : 'gap-6 py-5',
+          )}
+        >
+          {compactMode ? null : (
             <div className="space-y-1">
               <div className="text-sm font-medium">
-                {t('serviceDesk.workbench.claimAction')}
+                {t('serviceDesk.workbench.timelineTitle')}
               </div>
               <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.claimHint')}
+                {detailLoading
+                  ? t('common.loading')
+                  : t('serviceDesk.workbench.timelineDescription')}
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleClaim()}
-              disabled={claiming || session.queue_status === 'manual'}
-            >
-              {t('serviceDesk.workbench.claimAction')}
-            </Button>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleRelease()}
-              disabled={!canRelease || releasing}
-            >
-              {t('serviceDesk.workbench.releaseAction')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleReturnToAi()}
-              disabled={!canReturnToAi || returningToAi}
-            >
-              {t('serviceDesk.workbench.returnToAiAction')}
-            </Button>
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+            <MessageTimeline
+              items={detail?.messages || []}
+              emptyText={t('serviceDesk.workbench.noTimeline')}
+            />
           </div>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">
-                {t('serviceDesk.workbench.assistDraftTitle')}
+        <div className="shrink-0 border-t bg-muted/10 px-6 py-5">
+          <div className="space-y-4">
+            {assistDraft && assistDraftVisible ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/85 px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-950">
+                      <Sparkles className="size-4 text-amber-600" />
+                      {t('serviceDesk.workbench.assistDraftTitle')}
+                    </div>
+                    <div className="text-xs text-amber-900/80">
+                      {t('serviceDesk.workbench.assistDraftHint')}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-950">
+                    {t('serviceDesk.workbench.assistDraftBadge')}
+                  </Badge>
+                </div>
+                <div className="mt-3 whitespace-pre-wrap rounded-xl border border-amber-200 bg-background/85 px-4 py-3 text-sm leading-6 text-foreground/90">
+                  {assistDraft.reply_text}
+                </div>
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAssistDraftVisible(false)}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button type="button" onClick={handleInsertAssistDraft}>
+                    {t('serviceDesk.workbench.insertAssistDraft')}
+                  </Button>
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.assistDraftHint')}
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleGenerateAssistDraft()}
-              disabled={generatingDraft}
-            >
-              {t('serviceDesk.workbench.generateAssistDraft')}
-            </Button>
-          </div>
-          {assistDraft ? (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-3">
-              <div className="text-xs text-muted-foreground">
-                {t('serviceDesk.workbench.assistDraftBadge')}
-              </div>
-              <div className="mt-1 whitespace-pre-wrap text-sm">
-                {assistDraft.reply_text}
-              </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {t('serviceDesk.workbench.timelineTitle')}
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.sendReply')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {canReply
+                    ? t('serviceDesk.workbench.replyPlaceholder')
+                    : t('serviceDesk.workbench.claimHint')}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleClaim()}
+                  disabled={claiming || session.queue_status === 'manual'}
+                >
+                  {t('serviceDesk.workbench.claimAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleRelease()}
+                  disabled={!canRelease || releasing}
+                >
+                  {t('serviceDesk.workbench.releaseAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleReturnToAi()}
+                  disabled={!canReturnToAi || returningToAi}
+                >
+                  {t('serviceDesk.workbench.returnToAiAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleGenerateAssistDraft()}
+                  disabled={generatingDraft}
+                >
+                  <Sparkles className="size-4" />
+                  {t('serviceDesk.workbench.generateAssistDraft')}
+                </Button>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {detailLoading
-                ? t('common.loading')
-                : t('serviceDesk.workbench.timelineDescription')}
-            </div>
-          </div>
-          <MessageTimeline
-            items={detail?.messages || []}
-            emptyText={t('serviceDesk.workbench.noTimeline')}
-          />
-        </div>
 
-        <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {t('serviceDesk.workbench.sendReply')}
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.quickRepliesTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.quickRepliesDescription')}
+                </div>
+              </div>
+              <QuickReplyPanel
+                botUuid={session.bot_uuid}
+                onInsert={(value) => {
+                  setReplyText((prev) => (prev ? `${prev}\n${value}` : value));
+                }}
+              />
+              <Textarea
+                rows={7}
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+                placeholder={t('serviceDesk.workbench.replyPlaceholder')}
+                disabled={!canReply || sending}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => void handleReply()}
+                  disabled={!canReply || !replyText.trim() || sending}
+                >
+                  {t('serviceDesk.workbench.sendReply')}
+                </Button>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {canReply
-                ? t('serviceDesk.workbench.replyPlaceholder')
-                : t('serviceDesk.workbench.claimHint')}
-            </div>
-          </div>
-          <QuickReplyPanel
-            botUuid={session.bot_uuid}
-            onInsert={(value) => {
-              setReplyText((prev) => (prev ? `${prev}\n${value}` : value));
-            }}
-          />
-          <Textarea
-            rows={7}
-            value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
-            placeholder={t('serviceDesk.workbench.replyPlaceholder')}
-            disabled={!canReply || sending}
-          />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void handleReply()}
-              disabled={!canReply || !replyText.trim() || sending}
-            >
-              {t('serviceDesk.workbench.sendReply')}
-            </Button>
           </div>
         </div>
       </CardContent>

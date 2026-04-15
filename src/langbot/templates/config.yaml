@@ -18,6 +18,7 @@ proxy:
 system:
     instance_id: ''
     edition: community
+    demo_login_key: ''
     recovery_key: ''
     allow_modify_login_info: true
     disabled_adapters: []

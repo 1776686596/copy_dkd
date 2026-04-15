@@ -913,6 +913,10 @@ export class BackendClient extends BaseHttpClient {
     return this.post('/api/v1/user/auth', { user, password });
   }
 
+  public authUserByKey(key: string): Promise<ApiRespUserToken> {
+    return this.post('/api/v1/user/auth-key', { key });
+  }
+
   public checkUserToken(): Promise<ApiRespUserToken> {
     return this.get('/api/v1/user/check-token');
   }
@@ -955,6 +959,7 @@ export class BackendClient extends BaseHttpClient {
     initialized: boolean;
     account_type?: 'local' | 'space';
     has_password?: boolean;
+    demo_login_key_enabled?: boolean;
   }> {
     return this.get('/api/v1/user/account-info');
   }

@@ -106,9 +106,11 @@ export const initializeSystemInfo = async (): Promise<void> => {
 export const initializeUserInfo = async (): Promise<void> => {
   try {
     userInfo = await backendClient.getUserInfo();
+    return;
   } catch (error) {
     console.error('Failed to initialize user info:', error);
     userInfo = null;
+    return;
   }
 };
 

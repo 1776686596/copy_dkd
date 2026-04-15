@@ -40,6 +40,23 @@ class UserRouterGroup(group.RouterGroup):
 
             return self.success(data={'token': token})
 
+        @self.route('/auth-key', methods=['POST'], auth_type=group.AuthType.NONE)
+        async def _() -> str:
+            json_data = await quart.request.json
+            if not isinstance(json_data, dict):
+                json_data = {}
+            login_key = json_data.get('key', '')
+
+            if not login_key:
+                return self.fail(1, 'Login key is required')
+
+            try:
+                token = await self.ap.user_service.authenticate_with_demo_key(login_key)
+            except ValueError as e:
+                return self.fail(1, str(e))
+
+            return self.success(data={'token': token})
+
         @self.route('/check-token', methods=['GET'], auth_type=group.AuthType.USER_TOKEN)
         async def _(user_email: str) -> str:
             token = await self.ap.user_service.generate_jwt_token(user_email)
@@ -188,6 +205,9 @@ class UserRouterGroup(group.RouterGroup):
                     'initialized': True,
                     'account_type': user_obj.account_type,
                     'has_password': bool(user_obj.password and user_obj.password.strip()),
+                    'demo_login_key_enabled': bool(
+                        self.ap.instance_config.data.get('system', {}).get('demo_login_key', '').strip()
+                    ),
                 }
             )
 

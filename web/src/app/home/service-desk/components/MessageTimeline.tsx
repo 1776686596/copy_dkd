@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '@/components/ui/badge';
 import { ServiceDeskTimelineMessage } from '@/app/infra/entities/api';
+import { MessageContentRenderer } from '@/app/home/monitoring/components/MessageContentRenderer';
 
 function formatDateTime(value?: string) {
   if (!value) return '--';
@@ -27,40 +27,52 @@ export default function MessageTimeline({
   }, [items]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {sortedItems.length === 0 ? (
         <div className="rounded-2xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
           {emptyText}
         </div>
       ) : null}
 
-      {sortedItems.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                {item.role === 'assistant'
-                  ? t('serviceDesk.workbench.timelineAssistant')
-                  : t('serviceDesk.workbench.timelineUser')}
-              </Badge>
-              {item.user_name ? (
-                <span className="text-xs text-muted-foreground">
-                  {item.user_name}
-                </span>
-              ) : null}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {formatDateTime(item.timestamp)}
+      {sortedItems.map((item) => {
+        const isAssistant = item.role === 'assistant';
+        const roleLabel = isAssistant
+          ? t('serviceDesk.workbench.timelineAssistant')
+          : t('serviceDesk.workbench.timelineUser');
+
+        return (
+          <div
+            key={item.id}
+            className={`flex ${isAssistant ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[88%] rounded-[24px] px-4 py-3 shadow-sm ${
+                isAssistant
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border/70 bg-muted/20 text-foreground'
+              }`}
+            >
+              <div
+                className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${
+                  isAssistant
+                    ? 'text-primary-foreground/80'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                <span className="font-medium">{roleLabel}</span>
+                {item.user_name ? <span>{item.user_name}</span> : null}
+                <span>{formatDateTime(item.timestamp)}</span>
+              </div>
+              <div className="mt-2 break-words text-sm leading-6">
+                <MessageContentRenderer
+                  content={item.message_content}
+                  maxLines={0}
+                />
+              </div>
             </div>
           </div>
-          <div className="mt-3 whitespace-pre-wrap text-sm">
-            {item.message_content}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 export default function PluginMarketCardComponent({
   cardVO,
@@ -23,6 +24,7 @@ export default function PluginMarketCardComponent({
   tagNames?: Record<string, string>;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [visibleTags, setVisibleTags] = useState(2);
@@ -71,8 +73,11 @@ export default function PluginMarketCardComponent({
 
   function handleViewDetailsClick(e: React.MouseEvent) {
     e.stopPropagation();
-    const detailUrl = `https://space.langbot.app/market/${cardVO.author}/${cardVO.pluginName}`;
-    window.open(detailUrl, '_blank');
+    navigate(
+      `/home/market/${encodeURIComponent(cardVO.author)}/${encodeURIComponent(
+        cardVO.pluginName,
+      )}`,
+    );
   }
 
   const kindIconMap: Record<string, React.ReactNode> = {

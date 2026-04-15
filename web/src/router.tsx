@@ -51,6 +51,10 @@ const MarketPage = lazyPage(
   'market-page',
   () => import('@/app/home/market/page'),
 );
+const MarketDetailPage = lazyPage(
+  'market-detail-page',
+  () => import('@/app/home/market/detail/page'),
+);
 const MCPPage = lazyPage('mcp-page', () => import('@/app/home/mcp/page'));
 const KnowledgePage = lazyPage(
   'knowledge-page',
@@ -190,6 +194,17 @@ export const router = createBrowserRouter([
       <Suspense fallback={<Loading />}>
         <HomeLayout>
           <MarketPage />
+        </HomeLayout>
+      </Suspense>
+    ),
+  },
+  {
+    path: '/home/market/:author/:pluginName',
+    errorElement,
+    element: (
+      <Suspense fallback={<Loading />}>
+        <HomeLayout>
+          <MarketDetailPage />
         </HomeLayout>
       </Suspense>
     ),

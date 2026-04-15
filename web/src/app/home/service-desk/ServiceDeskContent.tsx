@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -77,6 +77,9 @@ function getChannelSurfaceClass(adapter: string) {
 
 export default function ServiceDeskContent() {
   const { t } = useTranslation();
+  const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
+  const workspaceOverviewSentinelRef = useRef<HTMLDivElement | null>(null);
+  const workbenchGridRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<ServiceDeskViewMode>('overview');
   const [activeTab, setActiveTab] = useState('workbench');
   const [bots, setBots] = useState<ServiceDeskBot[]>([]);
@@ -92,6 +95,8 @@ export default function ServiceDeskContent() {
   const [sessionsTotal, setSessionsTotal] = useState(0);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [isWorkbenchMode, setIsWorkbenchMode] = useState(false);
+  const [workbenchViewportHeight, setWorkbenchViewportHeight] = useState(560);
 
   const loadBootstrapData = useCallback(async () => {
     setBootstrapping(true);
@@ -223,6 +228,83 @@ export default function ServiceDeskContent() {
     },
     [],
   );
+
+  const measureWorkbenchViewport = useCallback(() => {
+    const root = workspaceScrollRef.current;
+    const grid = workbenchGridRef.current;
+    if (!root || !grid) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const gridRect = grid.getBoundingClientRect();
+    const topGap = Math.max(gridRect.top - rootRect.top, 0);
+    const nextHeight = Math.max(root.clientHeight - topGap - 24, 560);
+    setWorkbenchViewportHeight(nextHeight);
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== 'workspace') return;
+
+    const root = workspaceScrollRef.current;
+    if (!root) return;
+
+    root.scrollTo({ top: 0, behavior: 'auto' });
+    setIsWorkbenchMode(false);
+  }, [activeTab, selectedBotUuid, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'workspace' || activeTab !== 'workbench') {
+      setIsWorkbenchMode(false);
+      return;
+    }
+
+    const root = workspaceScrollRef.current;
+    const sentinel = workspaceOverviewSentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsWorkbenchMode(!entry.isIntersecting);
+      },
+      {
+        root,
+        threshold: 0,
+        rootMargin: '-12px 0px 0px 0px',
+      },
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [activeTab, selectedBotUuid, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'workspace' || activeTab !== 'workbench') return;
+
+    const root = workspaceScrollRef.current;
+    const grid = workbenchGridRef.current;
+    if (!root || !grid) return;
+
+    measureWorkbenchViewport();
+
+    const resizeObserver = new ResizeObserver(() => {
+      measureWorkbenchViewport();
+    });
+    resizeObserver.observe(root);
+    resizeObserver.observe(grid);
+
+    const handleScroll = () => {
+      measureWorkbenchViewport();
+    };
+
+    root.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', measureWorkbenchViewport);
+
+    return () => {
+      root.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', measureWorkbenchViewport);
+      resizeObserver.disconnect();
+    };
+  }, [activeTab, measureWorkbenchViewport, selectedBotUuid, viewMode]);
 
   if (bootstrapping) {
     return (
@@ -391,9 +473,20 @@ export default function ServiceDeskContent() {
   const selectedChannelLabel = selectedBot
     ? getChannelLabel(selectedBot.adapter, t)
     : t('common.none');
+  const shouldCompactWorkbench =
+    activeTab === 'workbench' && isWorkbenchMode;
+  const workbenchSidebarStyle = shouldCompactWorkbench
+    ? { height: `${workbenchViewportHeight}px` }
+    : undefined;
+  const workbenchDetailStyle = shouldCompactWorkbench
+    ? { minHeight: `${workbenchViewportHeight}px` }
+    : undefined;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
+    <div
+      ref={workspaceScrollRef}
+      className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1"
+    >
       <section className="rounded-[28px] border border-border/70 bg-background px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-3">
@@ -472,13 +565,20 @@ export default function ServiceDeskContent() {
           </div>
         </div>
       </section>
+      <div
+        ref={workspaceOverviewSentinelRef}
+        aria-hidden="true"
+        className="h-px w-full shrink-0"
+      />
 
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
         className="flex min-h-0 flex-1 flex-col gap-4 pb-6"
       >
-        <TabsList className="sticky top-0 z-20 h-11 shrink-0 self-start rounded-2xl border border-border/70 bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <TabsList
+          className="sticky top-0 z-20 h-11 shrink-0 self-start rounded-2xl border border-border/70 bg-background/95 p-1 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80"
+        >
           <TabsTrigger value="workbench">
             {t('serviceDesk.tabs.workbench')}
           </TabsTrigger>
@@ -494,8 +594,17 @@ export default function ServiceDeskContent() {
           value="workbench"
           className="mt-0 flex min-h-0 flex-1 flex-col gap-4"
         >
-          <div className="grid min-h-0 gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
-            <div className="flex min-h-0 flex-col gap-4 xl:sticky xl:top-[4.75rem]">
+          <div
+            ref={workbenchGridRef}
+            className="grid min-h-0 gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-stretch"
+          >
+            <div
+              className={cn(
+                'flex min-h-0 flex-col gap-4',
+                shouldCompactWorkbench && 'xl:sticky xl:top-[4.75rem]',
+              )}
+              style={workbenchSidebarStyle}
+            >
               <SessionFilters
                 queueFilters={QUEUE_FILTERS}
                 queueFilter={queueFilter}
@@ -506,8 +615,9 @@ export default function ServiceDeskContent() {
                 onSearchKeywordChange={setSearchKeyword}
                 onClaimedByFilterChange={setClaimedByFilter}
                 onRefresh={() => void loadSessions()}
+                compact={shouldCompactWorkbench}
               />
-              <div className="min-h-0 xl:h-[calc(100vh-14rem)]">
+              <div className="min-h-0 flex-1">
                 <SessionList
                   sessions={sessions}
                   total={sessionsTotal}
@@ -517,7 +627,13 @@ export default function ServiceDeskContent() {
                 />
               </div>
             </div>
-            <SessionDetail session={selectedSession} onRefresh={loadSessions} />
+            <div className="min-h-0" style={workbenchDetailStyle}>
+              <SessionDetail
+                session={selectedSession}
+                onRefresh={loadSessions}
+                compactMode={shouldCompactWorkbench}
+              />
+            </div>
           </div>
         </TabsContent>
 

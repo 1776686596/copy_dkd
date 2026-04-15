@@ -29,11 +29,17 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { resolveLoginPageMode } from './loginPageMode';
 
 const formSchema = (t: (key: string) => string) =>
   z.object({
     email: z.string().email(t('common.invalidEmail')),
     password: z.string().min(1, t('common.emptyPassword')),
+  });
+
+const keyFormSchema = (t: (key: string) => string) =>
+  z.object({
+    loginKey: z.string().min(1, t('common.emptyLoginKey')),
   });
 
 type AccountType = 'local' | 'space';
@@ -44,15 +50,23 @@ export default function Login() {
   const [spaceLoading, setSpaceLoading] = useState(false);
   const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [hasPassword, setHasPassword] = useState(false);
+  const [demoLoginKeyEnabled, setDemoLoginKeyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
 
-  const form = useForm<z.infer<ReturnType<typeof formSchema>>>({
+  const passwordForm = useForm<z.infer<ReturnType<typeof formSchema>>>({
     resolver: zodResolver(formSchema(t)),
     defaultValues: {
       email: '',
       password: '',
+    },
+  });
+
+  const loginKeyForm = useForm<z.infer<ReturnType<typeof keyFormSchema>>>({
+    resolver: zodResolver(keyFormSchema(t)),
+    defaultValues: {
+      loginKey: '',
     },
   });
 
@@ -78,6 +92,7 @@ export default function Login() {
       }
       setAccountType(res.account_type || 'local');
       setHasPassword(res.has_password || false);
+      setDemoLoginKeyEnabled(res.demo_login_key_enabled || false);
       setLoading(false);
 
       // Also check if already logged in
@@ -106,6 +121,10 @@ export default function Login() {
     handleLogin(values.email, values.password);
   }
 
+  function onSubmitLoginKey(values: z.infer<ReturnType<typeof keyFormSchema>>) {
+    handleKeyLogin(values.loginKey);
+  }
+
   function handleLogin(username: string, password: string) {
     httpClient
       .authUser(username, password)
@@ -118,6 +137,24 @@ export default function Login() {
       })
       .catch(() => {
         toast.error(t('common.loginFailed'));
+      });
+  }
+
+  function handleKeyLogin(loginKey: string) {
+    httpClient
+      .authUserByKey(loginKey)
+      .then(async (res) => {
+        localStorage.setItem('token', res.token);
+        const info = await httpClient.getUserInfo();
+        if (info.user) {
+          localStorage.setItem('userEmail', info.user);
+        }
+        await initializeUserInfo();
+        navigate('/home');
+        toast.success(t('common.loginSuccess'));
+      })
+      .catch(() => {
+        toast.error(t('common.loginKeyFailed'));
       });
   }
 
@@ -154,7 +191,7 @@ export default function Login() {
             </div>
             <img
               src={langbotIcon}
-              alt="LangBot"
+              alt="传奇bot"
               className="w-16 h-16 mb-4 mx-auto"
             />
             <CardTitle className="text-2xl text-center">
@@ -190,10 +227,12 @@ export default function Login() {
     );
   }
 
-  // Determine what to show based on account type
-  const showLocalLogin =
-    accountType === 'local' || (accountType === 'space' && hasPassword);
-  const showSpaceLogin = accountType === 'space';
+  const { showPasswordLogin, showDemoKeyLogin, showSpaceLogin } =
+    resolveLoginPageMode({
+      accountType,
+      hasPassword,
+      demoLoginKeyEnabled,
+    });
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:dark:bg-neutral-900">
@@ -205,7 +244,7 @@ export default function Login() {
           </div>
           <img
             src={langbotIcon}
-            alt="LangBot"
+            alt="传奇bot"
             className="w-16 h-16 mb-4 mx-auto"
           />
           <CardTitle className="text-2xl text-center">
@@ -263,7 +302,7 @@ export default function Login() {
           )}
 
           {/* Divider - only show if both login methods are available */}
-          {showSpaceLogin && showLocalLogin && (
+          {showSpaceLogin && (showPasswordLogin || showDemoKeyLogin) && (
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
@@ -277,14 +316,53 @@ export default function Login() {
           )}
 
           {/* Local Account Login - show for local accounts or space accounts with password */}
-          {showLocalLogin && (
-            <Form {...form}>
+          {showDemoKeyLogin && (
+            <Form {...loginKeyForm}>
               <form
-                onSubmit={form.handleSubmit(onSubmit)}
+                onSubmit={loginKeyForm.handleSubmit(onSubmitLoginKey)}
                 className="space-y-6"
               >
                 <FormField
-                  control={form.control}
+                  control={loginKeyForm.control}
+                  name="loginKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('common.loginKey')}</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                          <Input
+                            type="password"
+                            placeholder={t('common.enterLoginKey')}
+                            className="pl-10"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type="submit"
+                  variant={showSpaceLogin ? 'outline' : 'default'}
+                  className="w-full cursor-pointer"
+                >
+                  {t('common.loginWithKey')}
+                </Button>
+              </form>
+            </Form>
+          )}
+
+          {showPasswordLogin && (
+            <Form {...passwordForm}>
+              <form
+                onSubmit={passwordForm.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
+                <FormField
+                  control={passwordForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -305,7 +383,7 @@ export default function Login() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={passwordForm.control}
                   name="password"
                   render={({ field }) => (
                     <FormItem>
@@ -346,26 +424,6 @@ export default function Login() {
             </Form>
           )}
 
-          <p className="text-xs text-center text-muted-foreground">
-            {t('common.agreementNotice')}{' '}
-            <a
-              href="https://langbot.app/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground transition-colors"
-            >
-              {t('common.privacyPolicy')}
-            </a>{' '}
-            {t('common.and')}{' '}
-            <a
-              href={t('common.dataCollectionPolicyUrl')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground transition-colors"
-            >
-              {t('common.dataCollectionPolicy')}
-            </a>
-          </p>
         </CardContent>
       </Card>
     </div>
