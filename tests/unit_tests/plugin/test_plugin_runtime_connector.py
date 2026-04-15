@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_stdio_runtime_launches_in_prod_mode(monkeypatch):
+async def test_stdio_runtime_launch_uses_runtime_stdio_args(monkeypatch):
     from src.langbot.pkg.plugin.connector import PluginRuntimeConnector
 
     captured: dict[str, object] = {}
@@ -41,4 +41,4 @@ async def test_stdio_runtime_launches_in_prod_mode(monkeypatch):
     await connector.initialize()
 
     assert captured['command']
-    assert captured['args'] == ['-m', 'langbot_plugin.cli.__init__', 'rt', '-s', '--prod']
+    assert captured['args'] == ['-m', 'langbot_plugin.cli.__init__', 'rt', '-s']

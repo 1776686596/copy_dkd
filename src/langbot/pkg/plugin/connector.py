@@ -176,7 +176,7 @@ class PluginRuntimeConnector:
             env = os.environ.copy()
             self.ctrl = stdio_client_controller.StdioClientController(
                 command=python_path,
-                args=['-m', 'langbot_plugin.cli.__init__', 'rt', '-s', '--prod'],
+                args=['-m', 'langbot_plugin.cli.__init__', 'rt', '-s'],
                 env=env,
             )
             task = self.ctrl.run(new_connection_callback)
