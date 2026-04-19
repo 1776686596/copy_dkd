@@ -996,6 +996,84 @@ async def test_handle_incoming_message_records_private_routing_decision_when_key
 
 
 @pytest.mark.asyncio
+async def test_handle_incoming_message_keeps_wecomprivate_keyword_request_in_ai_when_direct_handoff_disabled():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskService
+
+    ap = Mock()
+    ap.monitoring_service.record_message = AsyncMock()
+    ap.monitoring_service.update_session_activity = AsyncMock(return_value=True)
+    ap.wecom_private_service.bootstrap_private_lead = AsyncMock(return_value={'id': 'lead-1'})
+    ap.wecom_private_service.get_reception_config = AsyncMock(
+        return_value={
+            'reception_enabled': True,
+            'welcome_enabled': True,
+            'binding_required_fields': ['uid', 'server'],
+            'binding_trigger_keywords': ['绑定'],
+            'binding_prompt_text': '请补充 UID / 区服',
+            'fallback_reply_text': '已为你转人工，请稍候。',
+            'human_handoff_direct_enabled': False,
+        }
+    )
+    ap.wecom_private_service.get_session_overlay = AsyncMock(
+        return_value={'binding_task': None}
+    )
+    ap.wecom_private_service.record_routing_decision = AsyncMock()
+
+    service = ServiceDeskService(ap)
+    service._touch_session = AsyncMock(
+        return_value={
+            'session_id': 'person_cfg-1:wo123',
+            'mode': 'ai_hosted',
+            'queue_status': 'ai',
+            'manual_claimed_at': None,
+            'silent_since': None,
+            'unresolved_count': 0,
+        }
+    )
+    service.get_bot_config = AsyncMock(
+        return_value={'enabled': True, 'handoff_keywords': ['人工', '投诉']}
+    )
+    service.list_materials = AsyncMock(return_value=[])
+    service._update_session_state = AsyncMock()
+
+    bot_entity = SimpleNamespace(
+        adapter='wecomprivate',
+        uuid='bot-1',
+        name='私域客服机器人',
+        use_pipeline_uuid='pipeline-1',
+        use_pipeline_name='默认流程',
+    )
+    event = SimpleNamespace(
+        message_chain=_FakeMessageChain('我要人工处理'),
+        source_platform_object=SimpleNamespace(
+            follow_user_id='zhangsan',
+        ),
+        sender=SimpleNamespace(id='wo123', nickname='客户A'),
+    )
+    adapter = Mock()
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'cfg-1',
+        'external_user_id': 'wo123',
+        'last_message_id': 'msg-2',
+    }
+    adapter.get_launcher_id.return_value = 'cfg-1:wo123'
+
+    decision = await service.handle_incoming_message(
+        bot_entity=bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert decision.action == 'continue_ai'
+    service._update_session_state.assert_not_awaited()
+    ap.wecom_private_service.record_routing_decision.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_handle_incoming_message_returns_binding_prompt_and_skips_pipeline_when_required_fields_missing():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
@@ -1280,7 +1358,7 @@ async def test_handle_incoming_message_fallbacks_to_pending_manual_when_unresolv
 
 
 @pytest.mark.asyncio
-async def test_handle_incoming_message_does_not_fallback_on_normal_message_when_unresolved_count_is_near_threshold():
+async def test_handle_incoming_message_resets_unresolved_count_on_normal_message_when_near_threshold():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
 
@@ -1353,7 +1431,10 @@ async def test_handle_incoming_message_does_not_fallback_on_normal_message_when_
     )
 
     assert decision.action == 'continue_ai'
-    service._update_session_state.assert_not_awaited()
+    service._update_session_state.assert_awaited_once_with(
+        'person_cfg-1:wo123',
+        unresolved_count=0,
+    )
     ap.wecom_private_service.record_routing_decision.assert_not_awaited()
 
 

@@ -642,6 +642,7 @@ export default function ServiceDeskContent() {
                 session={selectedSession}
                 onRefresh={loadSessions}
                 compactMode={shouldCompactWorkbench}
+                botAdapter={selectedBot?.adapter ?? null}
               />
             </div>
           </div>

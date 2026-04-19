@@ -256,6 +256,7 @@ class ServiceDeskService:
             'binding_required_fields': ['uid', 'server'],
             'binding_trigger_keywords': [],
             'binding_prompt_text': '',
+            'human_handoff_direct_enabled': True,
         }
         if isinstance(config, dict):
             default_config.update(config)
@@ -811,7 +812,11 @@ class ServiceDeskService:
                 config.get('handoff_keywords', []),
             )
 
-        if matched_keyword is not None:
+        direct_handoff_enabled = True
+        if getattr(bot_entity, 'adapter', None) == 'wecomprivate':
+            direct_handoff_enabled = reception_config.get('human_handoff_direct_enabled', True)
+
+        if matched_keyword is not None and direct_handoff_enabled:
             await self._update_session_state(
                 session_id,
                 mode='manual',
@@ -854,6 +859,13 @@ class ServiceDeskService:
             message_text = str(getattr(event, 'message_chain', '') or '')
             required_fields = reception_config.get('binding_required_fields') or ['uid', 'server']
             trigger_keywords = reception_config.get('binding_trigger_keywords') or []
+            current_unresolved_count = int(self._get_value(session, 'unresolved_count', 0) or 0)
+            is_unresolved_followup = self._is_unresolved_followup(message_text)
+            if not is_unresolved_followup and current_unresolved_count > 0:
+                await self._update_session_state(
+                    session_id,
+                    unresolved_count=0,
+                )
             extracted_values = self._extract_binding_values(message_text)
             current_values = {
                 'uid': str(self._get_value(binding_task, 'provided_uid', '') or ''),
@@ -918,10 +930,8 @@ class ServiceDeskService:
                     },
                 )
 
-            if self._is_unresolved_followup(message_text):
-                next_unresolved_count = int(
-                    self._get_value(session, 'unresolved_count', 0) or 0
-                ) + 1
+            if is_unresolved_followup:
+                next_unresolved_count = current_unresolved_count + 1
                 fallback_threshold = int(
                     (config or {}).get('fallback_unresolved_count', 2) or 2
                 )
@@ -1097,10 +1107,16 @@ class ServiceDeskService:
 
         bot_payload = {'uuid': self._get_value(session, 'bot_uuid')}
         platform_mgr = getattr(self.ap, 'platform_mgr', None)
+        runtime_bot = None
         if platform_mgr is not None and hasattr(platform_mgr, 'get_bot_by_uuid'):
             runtime_bot = await platform_mgr.get_bot_by_uuid(self._get_value(session, 'bot_uuid'))
             if runtime_bot is not None:
                 bot_payload['name'] = getattr(getattr(runtime_bot, 'bot_entity', None), 'name', None)
+                bot_payload['adapter'] = getattr(
+                    getattr(runtime_bot, 'bot_entity', None),
+                    'adapter',
+                    None,
+                )
 
         overlay = {
             'lead': None,

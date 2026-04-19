@@ -36,12 +36,14 @@ interface SessionDetailProps {
   session: ServiceDeskSession | null;
   onRefresh: (showError?: boolean) => Promise<void>;
   compactMode?: boolean;
+  botAdapter?: string | null;
 }
 
 export default function SessionDetail({
   session,
   onRefresh,
   compactMode = false,
+  botAdapter = null,
 }: SessionDetailProps) {
   const { t } = useTranslation();
   const [claiming, setClaiming] = useState(false);
@@ -70,6 +72,8 @@ export default function SessionDetail({
   const routingDecisions = detail?.routing_decisions ?? [];
   const bindingTask = detail?.binding_task ?? null;
   const closureRecord = detail?.closure_record ?? null;
+  const supportsWecomPrivateOps =
+    (detail?.bot?.adapter ?? botAdapter) === 'wecomprivate';
   const isClosed =
     detailSession?.queue_status === 'closed' || closureRecord !== null;
   const canReply = detailSession?.queue_status === 'manual';
@@ -265,7 +269,7 @@ export default function SessionDetail({
   };
 
   const handleSaveBinding = async () => {
-    if (!session || isClosed) return;
+    if (!session || isClosed || !supportsWecomPrivateOps) return;
     setSavingBinding(true);
     try {
       const requestedFields =
@@ -303,7 +307,7 @@ export default function SessionDetail({
   };
 
   const handleCloseSession = async () => {
-    if (!session || isClosed) return;
+    if (!session || isClosed || !supportsWecomPrivateOps) return;
     setClosingSession(true);
     try {
       const resp = await httpClient.closeServiceDeskSession(session.session_id, {
@@ -527,157 +531,168 @@ export default function SessionDetail({
               )}
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">
-                  {t('serviceDesk.workbench.bindingTitle')}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t('serviceDesk.workbench.bindingDescription')}
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="binding-uid">
-                    {t('serviceDesk.workbench.bindingUidLabel')}
-                  </Label>
-                  <Input
-                    id="binding-uid"
-                    value={bindingUid}
-                    onChange={(event) => setBindingUid(event.target.value)}
-                    placeholder={t('serviceDesk.workbench.bindingUidPlaceholder')}
-                    disabled={savingBinding || isClosed}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="binding-server">
-                    {t('serviceDesk.workbench.bindingServerLabel')}
-                  </Label>
-                  <Input
-                    id="binding-server"
-                    value={bindingServer}
-                    onChange={(event) => setBindingServer(event.target.value)}
-                    placeholder={t(
-                      'serviceDesk.workbench.bindingServerPlaceholder',
-                    )}
-                    disabled={savingBinding || isClosed}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="binding-role-name">
-                    {t('serviceDesk.workbench.bindingRoleNameLabel')}
-                  </Label>
-                  <Input
-                    id="binding-role-name"
-                    value={bindingRoleName}
-                    onChange={(event) => setBindingRoleName(event.target.value)}
-                    placeholder={t(
-                      'serviceDesk.workbench.bindingRoleNamePlaceholder',
-                    )}
-                    disabled={savingBinding || isClosed}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  {bindingTask
-                    ? `${t('serviceDesk.workbench.bindingStatus')} · ${bindingTask.verify_status}`
-                    : t('serviceDesk.workbench.bindingEmpty')}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void handleSaveBinding()}
-                  disabled={savingBinding || isClosed}
-                >
-                  {savingBinding
-                    ? t('common.saving')
-                    : t('serviceDesk.workbench.bindingSave')}
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">
-                  {t('serviceDesk.workbench.closureTitle')}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t('serviceDesk.workbench.closureDescription')}
-                </div>
-              </div>
-              {closureRecord ? (
-                <div className="space-y-2 text-sm">
-                  <div>
-                    {t('serviceDesk.workbench.closureResolution')} ·{' '}
-                    <span className="font-medium">
-                      {closureRecord.resolution_type}
-                    </span>
+            {supportsWecomPrivateOps ? (
+              <>
+                <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">
+                      {t('serviceDesk.workbench.bindingTitle')}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t('serviceDesk.workbench.bindingDescription')}
+                    </div>
                   </div>
-                  <div>
-                    {t('serviceDesk.workbench.closureTags')} ·{' '}
-                    <span className="font-medium">
-                      {(closureRecord.tag_updates?.add ?? []).join(', ') || '--'}
-                    </span>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="binding-uid">
+                        {t('serviceDesk.workbench.bindingUidLabel')}
+                      </Label>
+                      <Input
+                        id="binding-uid"
+                        value={bindingUid}
+                        onChange={(event) => setBindingUid(event.target.value)}
+                        placeholder={t('serviceDesk.workbench.bindingUidPlaceholder')}
+                        disabled={savingBinding || isClosed}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="binding-server">
+                        {t('serviceDesk.workbench.bindingServerLabel')}
+                      </Label>
+                      <Input
+                        id="binding-server"
+                        value={bindingServer}
+                        onChange={(event) => setBindingServer(event.target.value)}
+                        placeholder={t(
+                          'serviceDesk.workbench.bindingServerPlaceholder',
+                        )}
+                        disabled={savingBinding || isClosed}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="binding-role-name">
+                        {t('serviceDesk.workbench.bindingRoleNameLabel')}
+                      </Label>
+                      <Input
+                        id="binding-role-name"
+                        value={bindingRoleName}
+                        onChange={(event) => setBindingRoleName(event.target.value)}
+                        placeholder={t(
+                          'serviceDesk.workbench.bindingRoleNamePlaceholder',
+                        )}
+                        disabled={savingBinding || isClosed}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    {t('serviceDesk.workbench.closureOperator')} ·{' '}
-                    <span className="font-medium">{closureRecord.closed_by}</span>
-                  </div>
-                  <div>
-                    {t('serviceDesk.workbench.closureTime')} ·{' '}
-                    <span className="font-medium">
-                      {formatDateTime(closureRecord.created_at)}
-                    </span>
-                  </div>
-                  <div>
-                    {t('serviceDesk.workbench.closureFeedback')} ·{' '}
-                    <span className="font-medium">
-                      {closureRecord.knowledge_feedback || '--'}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <Textarea
-                    rows={3}
-                    value={closureTags}
-                    onChange={(event) => setClosureTags(event.target.value)}
-                    placeholder={t('serviceDesk.workbench.closureTagsPlaceholder')}
-                    disabled={closingSession}
-                  />
-                  <Textarea
-                    rows={3}
-                    value={closureRemark}
-                    onChange={(event) => setClosureRemark(event.target.value)}
-                    placeholder={t('serviceDesk.workbench.closureRemarkPlaceholder')}
-                    disabled={closingSession}
-                  />
-                  <Textarea
-                    rows={3}
-                    value={knowledgeFeedback}
-                    onChange={(event) =>
-                      setKnowledgeFeedback(event.target.value)
-                    }
-                    placeholder={t(
-                      'serviceDesk.workbench.closureFeedbackPlaceholder',
-                    )}
-                    disabled={closingSession}
-                  />
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-muted-foreground">
+                      {bindingTask
+                        ? `${t('serviceDesk.workbench.bindingStatus')} · ${bindingTask.verify_status}`
+                        : t('serviceDesk.workbench.bindingEmpty')}
+                    </div>
                     <Button
                       type="button"
-                      onClick={() => void handleCloseSession()}
-                      disabled={closingSession}
+                      variant="outline"
+                      onClick={() => void handleSaveBinding()}
+                      disabled={savingBinding || isClosed}
                     >
-                      {closingSession
+                      {savingBinding
                         ? t('common.saving')
-                        : t('serviceDesk.workbench.closeAction')}
+                        : t('serviceDesk.workbench.bindingSave')}
                     </Button>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">
+                      {t('serviceDesk.workbench.closureTitle')}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t('serviceDesk.workbench.closureDescription')}
+                    </div>
+                  </div>
+                  {closureRecord ? (
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        {t('serviceDesk.workbench.closureResolution')} ·{' '}
+                        <span className="font-medium">
+                          {closureRecord.resolution_type}
+                        </span>
+                      </div>
+                      <div>
+                        {t('serviceDesk.workbench.closureTags')} ·{' '}
+                        <span className="font-medium">
+                          {(closureRecord.tag_updates?.add ?? []).join(', ') ||
+                            '--'}
+                        </span>
+                      </div>
+                      <div>
+                        {t('serviceDesk.workbench.closureOperator')} ·{' '}
+                        <span className="font-medium">
+                          {closureRecord.closed_by}
+                        </span>
+                      </div>
+                      <div>
+                        {t('serviceDesk.workbench.closureTime')} ·{' '}
+                        <span className="font-medium">
+                          {formatDateTime(closureRecord.created_at)}
+                        </span>
+                      </div>
+                      <div>
+                        {t('serviceDesk.workbench.closureFeedback')} ·{' '}
+                        <span className="font-medium">
+                          {closureRecord.knowledge_feedback || '--'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Textarea
+                        rows={3}
+                        value={closureTags}
+                        onChange={(event) => setClosureTags(event.target.value)}
+                        placeholder={t(
+                          'serviceDesk.workbench.closureTagsPlaceholder',
+                        )}
+                        disabled={closingSession}
+                      />
+                      <Textarea
+                        rows={3}
+                        value={closureRemark}
+                        onChange={(event) => setClosureRemark(event.target.value)}
+                        placeholder={t(
+                          'serviceDesk.workbench.closureRemarkPlaceholder',
+                        )}
+                        disabled={closingSession}
+                      />
+                      <Textarea
+                        rows={3}
+                        value={knowledgeFeedback}
+                        onChange={(event) =>
+                          setKnowledgeFeedback(event.target.value)
+                        }
+                        placeholder={t(
+                          'serviceDesk.workbench.closureFeedbackPlaceholder',
+                        )}
+                        disabled={closingSession}
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          onClick={() => void handleCloseSession()}
+                          disabled={closingSession}
+                        >
+                          {closingSession
+                            ? t('common.saving')
+                            : t('serviceDesk.workbench.closeAction')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
 

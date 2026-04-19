@@ -230,7 +230,9 @@ async def test_get_session_detail_returns_messages_and_overlay():
         )
     )
     ap.platform_mgr.get_bot_by_uuid = AsyncMock(
-        return_value=SimpleNamespace(bot_entity=SimpleNamespace(name='客服机器人'))
+        return_value=SimpleNamespace(
+            bot_entity=SimpleNamespace(name='客服机器人', adapter='wecomprivate')
+        )
     )
     ap.wecom_private_service.get_session_overlay = AsyncMock(
         return_value={
@@ -264,6 +266,7 @@ async def test_get_session_detail_returns_messages_and_overlay():
     assert detail['messages']
     assert 'handoff_reason' in detail['session']
     assert detail['bot']['uuid'] == 'bot-1'
+    assert detail['bot']['adapter'] == 'wecomprivate'
     assert detail['lead']['id'] == 'lead-1'
     assert detail['routing_decisions'][0]['decision'] == 'pending_manual'
     assert detail['binding_task']['verify_status'] == 'pending'
@@ -517,6 +520,39 @@ async def test_upsert_binding_task_endpoint_delegates_to_wecom_private_service()
 
 
 @pytest.mark.asyncio
+async def test_upsert_binding_task_endpoint_rejects_non_wecomprivate_session():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.controller.groups.service_desk import ServiceDeskRouterGroup
+
+    quart_app = quart.Quart(__name__)
+    ap = SimpleNamespace(
+        service_desk_service=SimpleNamespace(),
+        wecom_private_service=SimpleNamespace(
+            upsert_binding_task=AsyncMock(
+                side_effect=ValueError('only wecomprivate sessions support private-domain actions')
+            )
+        ),
+        user_service=SimpleNamespace(
+            verify_jwt_token=AsyncMock(return_value='staff@example.com'),
+            get_user_by_email=AsyncMock(return_value=SimpleNamespace(id='u-1', user='客服A')),
+        ),
+    )
+    group = ServiceDeskRouterGroup(ap, quart_app)
+    await group.initialize()
+
+    response = await quart_app.test_client().post(
+        '/api/v1/service-desk/sessions/person_lark:ou123/binding-task',
+        json={'requested_fields': ['uid']},
+        headers={'Authorization': 'Bearer fake'},
+    )
+    payload = await response.get_json()
+
+    assert response.status_code == 400
+    assert payload['msg'] == 'only wecomprivate sessions support private-domain actions'
+
+
+@pytest.mark.asyncio
 async def test_wecom_private_reception_config_endpoints_delegate_to_service():
     from types import SimpleNamespace
 
@@ -636,3 +672,39 @@ async def test_close_session_endpoint_delegates_to_wecom_private_service():
             'remark_text': '玩家 UID: 10001',
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_close_session_endpoint_rejects_non_wecomprivate_session():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.controller.groups.service_desk import ServiceDeskRouterGroup
+
+    quart_app = quart.Quart(__name__)
+    ap = SimpleNamespace(
+        service_desk_service=SimpleNamespace(),
+        wecom_private_service=SimpleNamespace(
+            close_private_session=AsyncMock(
+                side_effect=ValueError('only wecomprivate sessions support private-domain actions')
+            )
+        ),
+        user_service=SimpleNamespace(
+            verify_jwt_token=AsyncMock(return_value='staff@example.com'),
+            get_user_by_email=AsyncMock(return_value=SimpleNamespace(id='u-1', user='客服A')),
+        ),
+    )
+    group = ServiceDeskRouterGroup(ap, quart_app)
+    await group.initialize()
+
+    response = await quart_app.test_client().post(
+        '/api/v1/service-desk/sessions/person_lark:ou123/close',
+        json={
+            'resolution_type': 'answered',
+            'tag_updates': {'add': [], 'remove': []},
+        },
+        headers={'Authorization': 'Bearer fake'},
+    )
+    payload = await response.get_json()
+
+    assert response.status_code == 400
+    assert payload['msg'] == 'only wecomprivate sessions support private-domain actions'

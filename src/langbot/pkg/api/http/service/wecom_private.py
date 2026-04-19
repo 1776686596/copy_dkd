@@ -90,11 +90,18 @@ class WecomPrivateService:
                 'is_primary': True,
             }
         else:
-            remote = await client.get_contact_way(config_id=self._get_value(stored, 'config_id'))
+            config_id = self._get_value(stored, 'config_id')
+            await client.update_contact_way(
+                config_id=config_id,
+                follow_user_id=follow_user_id,
+                state=state,
+                remark=remark,
+            )
+            remote = await client.get_contact_way(config_id=config_id)
             contact_way = remote.get('contact_way', {})
             payload = {
                 'id': self._get_value(stored, 'id'),
-                'bot_uuid': bot_uuid,
+                'bot_uuid': self._get_value(stored, 'bot_uuid', bot_uuid),
                 'config_id': contact_way.get('config_id', self._get_value(stored, 'config_id')),
                 'qr_code_url': contact_way.get('qr_code', self._get_value(stored, 'qr_code_url')),
                 'remark': remark,
@@ -250,6 +257,7 @@ class WecomPrivateService:
         return await self._insert_routing_decision(payload)
 
     async def upsert_binding_task(self, *, session_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        await self._assert_wecom_private_session(session_id)
         existing = await self._get_binding_task(session_id)
         payload = dict(existing or {})
         payload['id'] = self._get_value(existing, 'id') or data.get('id') or str(uuid.uuid4())
@@ -285,6 +293,7 @@ class WecomPrivateService:
         operator_name: str,
         data: dict[str, Any],
     ) -> dict[str, Any]:
+        await self._assert_wecom_private_session(session_id)
         session = await self._get_session(session_id)
         if session is None:
             raise ValueError('service desk session not found')
@@ -547,6 +556,36 @@ class WecomPrivateService:
         if row is None:
             return None
         return self._serialize(persistence_service_desk.ServiceDeskSession, row)
+
+    async def _get_bot_adapter(self, bot_uuid: str | None) -> str | None:
+        if not bot_uuid:
+            return None
+        platform_mgr = getattr(self.ap, 'platform_mgr', None)
+        if platform_mgr is None or not hasattr(platform_mgr, 'get_bot_by_uuid'):
+            return None
+        get_bot_by_uuid = getattr(platform_mgr, 'get_bot_by_uuid', None)
+        if get_bot_by_uuid is None or not callable(get_bot_by_uuid):
+            return None
+        runtime_bot = get_bot_by_uuid(bot_uuid)
+        if hasattr(runtime_bot, '__await__'):
+            runtime_bot = await runtime_bot
+        if runtime_bot is None:
+            return None
+        adapter_name = getattr(getattr(runtime_bot, 'bot_entity', None), 'adapter', None)
+        if not isinstance(adapter_name, str) or not adapter_name.strip():
+            return None
+        return adapter_name.strip()
+
+    async def _assert_wecom_private_session(self, session_id: str) -> dict[str, Any]:
+        session = await self._get_session(session_id)
+        if session is None:
+            raise ValueError('service desk session not found')
+
+        adapter_name = await self._get_bot_adapter(self._get_value(session, 'bot_uuid'))
+        if adapter_name is not None and adapter_name != 'wecomprivate':
+            raise ValueError('only wecomprivate sessions support private-domain actions')
+
+        return session
 
     async def _get_lead(self, lead_id: str | None):
         if not lead_id:

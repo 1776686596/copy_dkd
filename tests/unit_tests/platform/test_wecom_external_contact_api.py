@@ -46,6 +46,40 @@ async def test_create_contact_way_uses_fixed_qr_payload():
 
 
 @pytest.mark.asyncio
+async def test_update_contact_way_uses_official_payload():
+    from langbot.libs.wecom_external_contact_api.api import WecomExternalContactClient
+
+    access_token_getter = AsyncMock(return_value='token-update')
+    request_json = AsyncMock(return_value={'errcode': 0, 'errmsg': 'ok'})
+
+    client = WecomExternalContactClient(
+        access_token_getter=access_token_getter,
+        request_json=request_json,
+    )
+
+    result = await client.update_contact_way(
+        config_id='cfg-1',
+        follow_user_id='lisi',
+        state='dkd_phase2_entry',
+        remark='DKD 私域固定二维码新版',
+    )
+
+    assert result['errcode'] == 0
+    request_json.assert_awaited_once_with(
+        'https://qyapi.weixin.qq.com/cgi-bin/externalcontact/update_contact_way',
+        method='POST',
+        params={'access_token': 'token-update'},
+        json={
+            'config_id': 'cfg-1',
+            'remark': 'DKD 私域固定二维码新版',
+            'skip_verify': True,
+            'state': 'dkd_phase2_entry',
+            'user': ['lisi'],
+        },
+    )
+
+
+@pytest.mark.asyncio
 async def test_mark_tags_and_update_remark_use_follow_user_scope():
     from langbot.libs.wecom_external_contact_api.api import WecomExternalContactClient
 

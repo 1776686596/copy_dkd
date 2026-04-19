@@ -58,6 +58,25 @@ class WecomExternalContactClient:
             json={'config_id': config_id},
         )
 
+    async def update_contact_way(
+        self,
+        config_id: str,
+        follow_user_id: str,
+        state: str,
+        remark: str,
+    ) -> dict[str, Any]:
+        return await self._request(
+            '/externalcontact/update_contact_way',
+            method='POST',
+            json={
+                'config_id': config_id,
+                'remark': remark,
+                'skip_verify': True,
+                'state': state,
+                'user': [follow_user_id],
+            },
+        )
+
     async def list_contact_ways(
         self,
         limit: int = 100,

@@ -325,6 +325,7 @@ export interface ServiceDeskSessionDetail {
   bot: {
     uuid: string;
     name?: string | null;
+    adapter?: string | null;
   };
   assist_draft: ServiceDeskAssistDraft | null;
   lead?: WecomPrivateLead | null;

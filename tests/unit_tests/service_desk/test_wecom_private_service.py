@@ -37,6 +37,60 @@ async def test_sync_primary_contact_config_creates_remote_qr_and_persists_payloa
 
 
 @pytest.mark.asyncio
+async def test_sync_primary_contact_config_updates_existing_remote_qr_before_refreshing_payload():
+    from langbot.pkg.api.http.service.wecom_private import WecomPrivateService
+
+    ap = Mock()
+    ap.persistence_mgr.execute_async = AsyncMock()
+    ap.persistence_mgr.serialize_model = Mock(side_effect=lambda _model, row: row)
+
+    service = WecomPrivateService(ap)
+    service._get_primary_contact_config = AsyncMock(
+        return_value={
+            'id': 'local-1',
+            'bot_uuid': 'bot-1',
+            'config_id': 'cfg-1',
+            'qr_code_url': 'https://qrcode.example/old',
+        }
+    )
+    service._build_external_contact_client = AsyncMock()
+    client = service._build_external_contact_client.return_value
+    client.update_contact_way = AsyncMock(return_value={'errcode': 0, 'errmsg': 'ok'})
+    client.get_contact_way = AsyncMock(
+        return_value={
+            'contact_way': {
+                'config_id': 'cfg-1',
+                'qr_code': 'https://qrcode.example/cfg-1-new',
+                'state': 'dkd_phase2_entry',
+                'user': ['lisi'],
+            }
+        }
+    )
+    service._upsert_contact_config = AsyncMock()
+
+    result = await service.sync_primary_contact_config(
+        bot_uuid='bot-1',
+        follow_user_id='lisi',
+        state='dkd_phase2_entry',
+        remark='DKD 私域固定二维码新版',
+    )
+
+    assert result['id'] == 'local-1'
+    assert result['qr_code_url'] == 'https://qrcode.example/cfg-1-new'
+    assert result['state'] == 'dkd_phase2_entry'
+    assert result['follow_user_ids'] == ['lisi']
+    assert result['remark'] == 'DKD 私域固定二维码新版'
+    client.update_contact_way.assert_awaited_once_with(
+        config_id='cfg-1',
+        follow_user_id='lisi',
+        state='dkd_phase2_entry',
+        remark='DKD 私域固定二维码新版',
+    )
+    client.get_contact_way.assert_awaited_once_with(config_id='cfg-1')
+    service._upsert_contact_config.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_list_contact_configs_returns_primary_first():
     from types import SimpleNamespace
 
@@ -225,6 +279,9 @@ async def test_upsert_binding_task_preserves_existing_values_when_verify_status_
             'completed_at': completed_at,
         }
     )
+    service._assert_wecom_private_session = AsyncMock(
+        return_value={'session_id': 'person_cfg-1:wo123'}
+    )
     service._upsert_binding_task_row = AsyncMock(side_effect=lambda payload: payload)
 
     task = await service.upsert_binding_task(
@@ -260,6 +317,9 @@ async def test_upsert_binding_task_clears_completed_at_when_verify_status_change
             'verify_status': 'completed',
             'completed_at': datetime.datetime(2026, 4, 19, 9, 0, 0),
         }
+    )
+    service._assert_wecom_private_session = AsyncMock(
+        return_value={'session_id': 'person_cfg-1:wo123'}
     )
     service._upsert_binding_task_row = AsyncMock(side_effect=lambda payload: payload)
 
