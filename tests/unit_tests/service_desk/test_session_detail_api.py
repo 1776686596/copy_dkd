@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import quart
 from sqlalchemy.exc import ResourceClosedError
 
 
@@ -231,6 +232,18 @@ async def test_get_session_detail_returns_messages_and_overlay():
     ap.platform_mgr.get_bot_by_uuid = AsyncMock(
         return_value=SimpleNamespace(bot_entity=SimpleNamespace(name='客服机器人'))
     )
+    ap.wecom_private_service.get_session_overlay = AsyncMock(
+        return_value={
+            'lead': {'id': 'lead-1', 'external_userid': 'wo123', 'profile_status': 'anonymous'},
+            'routing_decisions': [{'decision': 'pending_manual', 'trigger_reason': 'keyword'}],
+            'binding_task': {
+                'session_id': 'person_u1001',
+                'verify_status': 'pending',
+                'provided_role_name': '战士阿明',
+            },
+            'closure_record': None,
+        }
+    )
 
     service = ServiceDeskService(ap)
     service._get_session = AsyncMock(
@@ -239,8 +252,11 @@ async def test_get_session_detail_returns_messages_and_overlay():
             'bot_uuid': 'bot-1',
             'pipeline_uuid': 'pipeline-1',
             'handoff_reason': 'keyword',
+            'external_user_id': 'wo123',
+            'lead_id': 'lead-1',
         }
     )
+    service._load_messages_by_external_user = AsyncMock(return_value=[])
 
     detail = await service.get_session_detail('person_u1001')
 
@@ -248,6 +264,10 @@ async def test_get_session_detail_returns_messages_and_overlay():
     assert detail['messages']
     assert 'handoff_reason' in detail['session']
     assert detail['bot']['uuid'] == 'bot-1'
+    assert detail['lead']['id'] == 'lead-1'
+    assert detail['routing_decisions'][0]['decision'] == 'pending_manual'
+    assert detail['binding_task']['verify_status'] == 'pending'
+    assert detail['binding_task']['provided_role_name'] == '战士阿明'
 
 
 @pytest.mark.asyncio
@@ -335,7 +355,7 @@ async def test_get_session_detail_falls_back_to_external_user_messages_when_sess
     assert detail['messages'][0]['session_id'] == 'person_ou_customer_1'
     ap.monitoring_service.get_messages.assert_awaited_once_with(
         session_ids=['person_tenant-key-1:ou_customer_1'],
-        limit=200,
+        limit=1000,
         offset=0,
     )
 
@@ -446,3 +466,173 @@ async def test_get_session_detail_uses_first_row_without_consuming_result_twice(
 
     assert detail['session']['session_id'] == 'person_ou_demo_1'
     assert detail['bot']['name'] == '客服机器人'
+
+
+@pytest.mark.asyncio
+async def test_upsert_binding_task_endpoint_delegates_to_wecom_private_service():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.controller.groups.service_desk import ServiceDeskRouterGroup
+
+    quart_app = quart.Quart(__name__)
+    ap = SimpleNamespace(
+        service_desk_service=SimpleNamespace(),
+        wecom_private_service=SimpleNamespace(
+            upsert_binding_task=AsyncMock(
+                return_value={
+                    'session_id': 'person_cfg-1:wo123',
+                    'verify_status': 'pending',
+                }
+            )
+        ),
+        user_service=SimpleNamespace(
+            verify_jwt_token=AsyncMock(return_value='staff@example.com'),
+            get_user_by_email=AsyncMock(return_value=SimpleNamespace(id='u-1', user='客服A')),
+        ),
+    )
+    group = ServiceDeskRouterGroup(ap, quart_app)
+    await group.initialize()
+
+    response = await quart_app.test_client().post(
+        '/api/v1/service-desk/sessions/person_cfg-1:wo123/binding-task',
+        json={
+            'requested_fields': ['uid', 'server'],
+            'provided_uid': '10001',
+            'provided_role_name': '战士阿明',
+        },
+        headers={'Authorization': 'Bearer fake'},
+    )
+    payload = await response.get_json()
+
+    assert response.status_code == 200
+    assert payload['data']['binding_task']['verify_status'] == 'pending'
+    ap.wecom_private_service.upsert_binding_task.assert_awaited_once_with(
+        session_id='person_cfg-1:wo123',
+        data={
+            'requested_fields': ['uid', 'server'],
+            'provided_uid': '10001',
+            'provided_role_name': '战士阿明',
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_wecom_private_reception_config_endpoints_delegate_to_service():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.controller.groups.wecom_private import WecomPrivateRouterGroup
+
+    quart_app = quart.Quart(__name__)
+    ap = SimpleNamespace(
+        wecom_private_service=SimpleNamespace(
+            get_reception_config=AsyncMock(
+                return_value={
+                    'bot_uuid': 'bot-1',
+                    'reception_enabled': True,
+                    'welcome_enabled': True,
+                    'fallback_reply_text': '',
+                    'binding_required_fields': ['uid', 'server'],
+                    'binding_trigger_keywords': [],
+                    'binding_prompt_text': '',
+                    'human_handoff_direct_enabled': True,
+                }
+            ),
+            upsert_reception_config=AsyncMock(
+                return_value={
+                    'bot_uuid': 'bot-1',
+                    'reception_enabled': False,
+                    'welcome_enabled': False,
+                    'fallback_reply_text': '请稍后再试',
+                    'binding_required_fields': ['uid', 'server'],
+                    'binding_trigger_keywords': ['绑定'],
+                    'binding_prompt_text': '请提供角色名',
+                    'human_handoff_direct_enabled': False,
+                }
+            ),
+        ),
+        user_service=SimpleNamespace(
+            verify_jwt_token=AsyncMock(return_value='staff@example.com'),
+            get_user_by_email=AsyncMock(return_value=SimpleNamespace(id='u-1', user='客服A')),
+        ),
+    )
+    group = WecomPrivateRouterGroup(ap, quart_app)
+    await group.initialize()
+
+    client = quart_app.test_client()
+    headers = {'Authorization': 'Bearer fake'}
+
+    get_response = await client.get(
+        '/api/v1/wecom-private/reception-config/bot-1',
+        headers=headers,
+    )
+    get_payload = await get_response.get_json()
+
+    assert get_response.status_code == 200
+    assert get_payload['data']['config']['bot_uuid'] == 'bot-1'
+    ap.wecom_private_service.get_reception_config.assert_awaited_once_with('bot-1')
+
+    put_response = await client.put(
+        '/api/v1/wecom-private/reception-config/bot-1',
+        json={
+            'reception_enabled': False,
+            'binding_trigger_keywords': ['绑定'],
+        },
+        headers=headers,
+    )
+    put_payload = await put_response.get_json()
+
+    assert put_response.status_code == 200
+    assert put_payload['data']['config']['reception_enabled'] is False
+    ap.wecom_private_service.upsert_reception_config.assert_awaited_once_with(
+        'bot-1',
+        {
+            'reception_enabled': False,
+            'binding_trigger_keywords': ['绑定'],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_close_session_endpoint_delegates_to_wecom_private_service():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.controller.groups.service_desk import ServiceDeskRouterGroup
+
+    quart_app = quart.Quart(__name__)
+    ap = SimpleNamespace(
+        service_desk_service=SimpleNamespace(),
+        wecom_private_service=SimpleNamespace(
+            close_private_session=AsyncMock(
+                return_value={'session_id': 'person_cfg-1:wo123', 'resolution_type': 'answered'}
+            )
+        ),
+        user_service=SimpleNamespace(
+            verify_jwt_token=AsyncMock(return_value='staff@example.com'),
+            get_user_by_email=AsyncMock(return_value=SimpleNamespace(id='u-1', user='客服A')),
+        ),
+    )
+    group = ServiceDeskRouterGroup(ap, quart_app)
+    await group.initialize()
+
+    response = await quart_app.test_client().post(
+        '/api/v1/service-desk/sessions/person_cfg-1:wo123/close',
+        json={
+            'resolution_type': 'answered',
+            'tag_updates': {'add': ['tag-a'], 'remove': []},
+            'remark_text': '玩家 UID: 10001',
+        },
+        headers={'Authorization': 'Bearer fake'},
+    )
+    payload = await response.get_json()
+
+    assert response.status_code == 200
+    assert payload['data']['closure_record']['resolution_type'] == 'answered'
+    ap.wecom_private_service.close_private_session.assert_awaited_once_with(
+        session_id='person_cfg-1:wo123',
+        operator_name='客服A',
+        data={
+            'resolution_type': 'answered',
+            'tag_updates': {'add': ['tag-a'], 'remove': []},
+            'remark_text': '玩家 UID: 10001',
+        },
+    )

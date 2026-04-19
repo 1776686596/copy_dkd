@@ -172,13 +172,101 @@ export interface ServiceDeskMaterial {
   updated_at?: string;
 }
 
+export interface WecomPrivateContactConfig {
+  id: string;
+  bot_uuid: string;
+  config_id: string;
+  qr_code_url: string;
+  remark: string;
+  state: string;
+  follow_user_ids: string[];
+  enabled: boolean;
+  is_primary: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WecomPrivateReceptionConfig {
+  bot_uuid: string;
+  reception_enabled: boolean;
+  welcome_enabled: boolean;
+  fallback_reply_text: string;
+  binding_required_fields: string[];
+  binding_trigger_keywords: string[];
+  binding_prompt_text: string;
+  human_handoff_direct_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type WecomPrivateReceptionConfigUpdatePayload = Pick<
+  WecomPrivateReceptionConfig,
+  | 'reception_enabled'
+  | 'welcome_enabled'
+  | 'fallback_reply_text'
+  | 'binding_required_fields'
+  | 'binding_trigger_keywords'
+  | 'binding_prompt_text'
+  | 'human_handoff_direct_enabled'
+>;
+
+export interface WecomPrivateLead {
+  id: string;
+  external_userid: string;
+  follow_user_id: string;
+  source_state?: string | null;
+  current_tags: string[];
+  profile_status: 'anonymous' | 'binding_requested' | 'bound';
+  bound_game_identity: Record<string, string | null>;
+  remark_snapshot: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WecomPrivateRoutingDecision {
+  id: string;
+  session_id: string;
+  trigger_type: string;
+  trigger_reason: string;
+  decision: string;
+  matched_rule?: string | null;
+  confidence: number;
+  created_at?: string;
+}
+
+export interface WecomPrivateBindingTask {
+  id: string;
+  session_id: string;
+  requested_fields: string[];
+  provided_uid?: string | null;
+  provided_server?: string | null;
+  provided_role_name?: string | null;
+  verify_status: 'pending' | 'completed' | 'manual_verified';
+  requested_at?: string;
+  completed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WecomPrivateClosureRecord {
+  id: string;
+  session_id: string;
+  resolution_type: string;
+  tag_updates: Record<string, string[]>;
+  followup_needed: boolean;
+  knowledge_feedback?: string | null;
+  closed_by: string;
+  created_at?: string;
+}
+
 export type ServiceDeskSessionMode = 'ai_hosted' | 'manual' | 'ai_assist';
 
 export type ServiceDeskQueueStatus =
   | 'pending_manual'
   | 'manual'
   | 'silent'
-  | 'ai';
+  | 'ai'
+  | 'closed';
 
 export interface ServiceDeskSession {
   session_id: string;
@@ -239,6 +327,10 @@ export interface ServiceDeskSessionDetail {
     name?: string | null;
   };
   assist_draft: ServiceDeskAssistDraft | null;
+  lead?: WecomPrivateLead | null;
+  routing_decisions?: WecomPrivateRoutingDecision[];
+  binding_task?: WecomPrivateBindingTask | null;
+  closure_record?: WecomPrivateClosureRecord | null;
 }
 
 export type ServiceDeskQuickReply = ServiceDeskMaterial;

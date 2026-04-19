@@ -216,7 +216,7 @@ class RuntimeBot:
             await self.logger.info(f'Service desk skipped pipeline: {decision.reason}')
             return True
 
-        if decision.action == 'send_material':
+        if decision.action in {'send_material', 'send_material_and_skip'}:
             await self.ap.service_desk_service.send_structured_reply(
                 runtime_bot=self,
                 event=event,
@@ -224,7 +224,7 @@ class RuntimeBot:
                 material=decision.material or {},
             )
             await self.logger.info(f'Service desk sent structured reply: {decision.reason}')
-            return True
+            return decision.action == 'send_material_and_skip'
 
         return False
 

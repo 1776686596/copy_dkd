@@ -58,3 +58,4 @@ web/.next/
 
 # Local git worktrees
 .worktrees/
+.ace-tool/

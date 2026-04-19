@@ -85,3 +85,23 @@ class ServiceDeskRouterGroup(group.RouterGroup):
             payload = await quart.request.json
             await self.ap.service_desk_service.reply_to_session(session_id, payload['reply_text'])
             return self.success()
+
+        @self.route('/sessions/<session_id>/binding-task', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
+        async def upsert_binding_task(session_id: str, user_email: str) -> str:
+            payload = await quart.request.json
+            task = await self.ap.wecom_private_service.upsert_binding_task(
+                session_id=session_id,
+                data=payload or {},
+            )
+            return self.success(data={'binding_task': task})
+
+        @self.route('/sessions/<session_id>/close', methods=['POST'], auth_type=group.AuthType.USER_TOKEN)
+        async def close_session(session_id: str, user_email: str) -> str:
+            payload = await quart.request.json
+            user = await self.ap.user_service.get_user_by_email(user_email)
+            record = await self.ap.wecom_private_service.close_private_session(
+                session_id=session_id,
+                operator_name=getattr(user, 'user', user_email),
+                data=payload or {},
+            )
+            return self.success(data={'closure_record': record})

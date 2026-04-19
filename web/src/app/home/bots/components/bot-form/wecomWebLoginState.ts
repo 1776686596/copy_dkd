@@ -22,6 +22,11 @@ export interface WecomWebLoginUiState {
   shouldPoll: boolean;
 }
 
+export type WecomHostedLoginPanelState = WecomWebLoginPanelState;
+export type WecomHostedLoginUiState = WecomWebLoginUiState;
+export type ResolveWecomHostedLoginUiStateParams =
+  ResolveWecomWebLoginUiStateParams;
+
 function buildWecomWebLoginImageSrc(imageBase64: string | null): string | null {
   return imageBase64 ? `data:image/png;base64,${imageBase64}` : null;
 }
@@ -85,4 +90,10 @@ export function resolveWecomWebLoginUiState({
     qrImageSrc: null,
     shouldPoll: true,
   };
+}
+
+export function resolveWecomHostedLoginUiState(
+  params: ResolveWecomHostedLoginUiStateParams,
+): WecomHostedLoginUiState {
+  return resolveWecomWebLoginUiState(params);
 }

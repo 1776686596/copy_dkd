@@ -270,17 +270,18 @@ const enUS = {
   serviceDesk: {
     title: 'Service Desk',
     description:
-      'Handle WeCom service sessions, Lark DM sessions, routing rules, and quick-reply materials',
+      'Handle WeCom service, WeCom private-domain, and Lark DM sessions, routing rules, and quick-reply materials',
     heroTitle: 'Service Desk',
     heroDescription:
-      'A single-page dispatch surface for manual takeover, rule tuning, and quick material replies across WeCom service and Lark DM channels.',
+      'A single-page dispatch surface for manual takeover, rule tuning, and quick material replies across WeCom service, WeCom private-domain, and Lark DM channels.',
     wecomOnlyHint:
-      'Bots using the `wecomcs` or `lark` adapter are shown here.',
+      'Bots using the `wecomcs`, `wecomprivate`, or `lark` adapter are shown here.',
     noBotsTitle: 'No service desk bot is available yet',
     noBotsDescription:
-      'Create a bot with the `wecomcs` or `lark` adapter first, then the service desk can load sessions and rules.',
+      'Create a bot with the `wecomcs`, `wecomprivate`, or `lark` adapter first, then the service desk can load sessions and rules.',
     channels: {
       wecomcs: 'WeCom Service',
+      wecomprivate: 'WeCom Private Domain',
       lark: 'Lark DM',
     },
     overview: {
@@ -313,6 +314,7 @@ const enUS = {
       manual: 'Manual',
       silent: 'Silent',
       ai: 'AI Hosted',
+      closed: 'Closed',
     },
     mode: {
       ai_hosted: 'AI Hosted',
@@ -383,6 +385,51 @@ const enUS = {
       detailDescription:
         'Review the chat first, then decide whether to claim, return to AI, or send a manual reply.',
       detailLoadError: 'Failed to load session detail',
+      leadTitle: 'Lead Profile',
+      leadDescription:
+        'Review the private-domain lead source, tags, and current profile state.',
+      leadExternalUser: 'External User',
+      leadFollowUser: 'Owner',
+      leadSourceState: 'Source State',
+      leadProfileStatus: 'Profile Status',
+      leadTags: 'Current Tags',
+      leadEmpty: 'No private-domain lead data is available for this session yet',
+      routingTitle: 'Routing Decisions',
+      routingDescription:
+        'Keep routing decisions for later review when a rule sends the session to manual handling.',
+      routingEmpty: 'No routing decision has been recorded for this session yet',
+      bindingTitle: 'Binding Backfill',
+      bindingDescription:
+        'Operators can backfill UID, server, and role name information before closing the session.',
+      bindingUidLabel: 'UID',
+      bindingServerLabel: 'Server',
+      bindingRoleNameLabel: 'Role Name',
+      bindingUidPlaceholder: 'Enter UID',
+      bindingServerPlaceholder: 'Enter server',
+      bindingRoleNamePlaceholder: 'Enter role name',
+      bindingStatus: 'Binding Status',
+      bindingEmpty: 'No binding backfill has been saved yet',
+      bindingSave: 'Save Binding',
+      bindingSaveSuccess: 'Binding backfill saved',
+      bindingSaveError: 'Failed to save binding backfill',
+      closureTitle: 'Session Closure',
+      closureDescription:
+        'Write back remarks, tags, and knowledge feedback before closing the session.',
+      closureTags: 'Closure Tags',
+      closureTagsPlaceholder:
+        'Enter tags to add, separated by commas or new lines',
+      closureRemarkPlaceholder:
+        'Enter the post-session remark, such as UID, server, or resolution',
+      closureFeedback: 'Knowledge Feedback',
+      closureFeedbackPlaceholder:
+        'Record FAQ or knowledge-base follow-up items',
+      closureResolution: 'Resolution',
+      closureOperator: 'Closed By',
+      closureTime: 'Closed At',
+      closeAction: 'Close Session',
+      closeSuccess: 'Session closed',
+      closeError: 'Failed to close session',
+      closedHint: 'This session is already closed and can no longer accept manual replies.',
     },
     config: {
       title: 'Bot Rules',
@@ -401,6 +448,55 @@ const enUS = {
       saveError: 'Failed to save bot rules',
       pipelineBinding: 'Bound Pipeline',
       adapterType: 'Adapter',
+      wecomPrivate: {
+        title: 'Primary QR Code',
+        description:
+          'Sync the primary WeCom private-domain QR code used for lead capture and session bootstrap.',
+        receptionTitle: 'AI Reception',
+        receptionDescription:
+          'Configure automatic reception, required binding fields, and manual handoff rules for the private-domain entry.',
+        receptionEnabled: 'Enable AI Reception',
+        receptionEnabledHint:
+          'When disabled, the private-domain entry falls back to the default flow without the reception loop.',
+        welcomeEnabled: 'Send Welcome Message',
+        welcomeEnabledHint:
+          'Keep sending the welcome message when a new lead enters the flow.',
+        humanHandoffDirectEnabled: 'Direct Manual Handoff',
+        humanHandoffDirectEnabledHint:
+          'Send sessions with clear manual-help intent directly to the pending manual queue.',
+        bindingRequiredFields: 'Required Binding Fields',
+        bindingRequiredFieldsHint:
+          'Separate with commas or new lines. Supported values: uid, server, role_name. Empty falls back to uid and server.',
+        bindingRequiredFieldsPlaceholder: 'uid\nserver',
+        bindingTriggerKeywords: 'Binding Trigger Keywords',
+        bindingTriggerKeywordsHint:
+          'Separate with commas or new lines. Leave empty to rely on the runtime flow only.',
+        bindingTriggerKeywordsPlaceholder: 'bind\nrole name',
+        bindingPromptText: 'Binding Prompt Text',
+        bindingPromptTextHint:
+          'Prompt shown to the user after binding collection is triggered. It can be left empty.',
+        bindingPromptTextPlaceholder:
+          'Please provide your UID, server, and role name so we can continue.',
+        fallbackReplyText: 'Fallback Reply Text',
+        fallbackReplyTextHint:
+          'Fallback copy sent when the flow cannot continue asking follow-up questions. It can be left empty.',
+        fallbackReplyTextPlaceholder:
+          'If you need a human agent, please reply with "human".',
+        receptionLoadError: 'Failed to load AI reception config',
+        followUserId: 'Member ID',
+        contactState: 'State',
+        contactRemark: 'QR Remark',
+        followUserRequired: 'Member ID is required',
+        syncAction: 'Sync QR Code',
+        syncingAction: 'Syncing...',
+        syncSuccess: 'Primary QR code synced',
+        syncError: 'Failed to sync primary QR code',
+        loadError: 'Failed to load primary QR code',
+        qrPreview: 'QR Preview',
+        emptyQr: 'No synced primary QR code is available yet',
+        primaryState: 'Current state',
+        lastSynced: 'Last synced',
+      },
     },
     materials: {
       title: 'Quick Materials',

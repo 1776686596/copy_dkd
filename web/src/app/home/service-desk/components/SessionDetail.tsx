@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ServiceDeskAssistDraft,
-  ServiceDeskSessionDetail,
   ServiceDeskSession,
+  ServiceDeskSessionDetail,
 } from '@/app/infra/entities/api';
 import { httpClient } from '@/app/infra/http/HttpClient';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,7 +50,15 @@ export default function SessionDetail({
   const [returningToAi, setReturningToAi] = useState(false);
   const [sending, setSending] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [savingBinding, setSavingBinding] = useState(false);
+  const [closingSession, setClosingSession] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [bindingUid, setBindingUid] = useState('');
+  const [bindingServer, setBindingServer] = useState('');
+  const [bindingRoleName, setBindingRoleName] = useState('');
+  const [closureRemark, setClosureRemark] = useState('');
+  const [closureTags, setClosureTags] = useState('');
+  const [knowledgeFeedback, setKnowledgeFeedback] = useState('');
   const [assistDraft, setAssistDraft] = useState<ServiceDeskAssistDraft | null>(
     null,
   );
@@ -56,16 +66,50 @@ export default function SessionDetail({
   const [detail, setDetail] = useState<ServiceDeskSessionDetail | null>(null);
 
   const detailSession = detail?.session ?? session;
-  const canReply = session?.queue_status === 'manual';
-  const canRelease = session?.queue_status === 'manual';
-  const canReturnToAi = session?.queue_status !== 'ai';
+  const lead = detail?.lead ?? null;
+  const routingDecisions = detail?.routing_decisions ?? [];
+  const bindingTask = detail?.binding_task ?? null;
+  const closureRecord = detail?.closure_record ?? null;
+  const isClosed =
+    detailSession?.queue_status === 'closed' || closureRecord !== null;
+  const canReply = detailSession?.queue_status === 'manual';
+  const canRelease = detailSession?.queue_status === 'manual';
+  const canReturnToAi =
+    detailSession?.queue_status !== undefined &&
+    !['ai', 'closed'].includes(detailSession.queue_status);
 
   useEffect(() => {
     setReplyText('');
+    setBindingUid('');
+    setBindingServer('');
+    setBindingRoleName('');
+    setClosureRemark('');
+    setClosureTags('');
+    setKnowledgeFeedback('');
     setAssistDraft(null);
     setAssistDraftVisible(false);
     setDetail(null);
   }, [session?.session_id]);
+
+  useEffect(() => {
+    setBindingUid(bindingTask?.provided_uid ?? '');
+    setBindingServer(bindingTask?.provided_server ?? '');
+    setBindingRoleName(bindingTask?.provided_role_name ?? '');
+  }, [
+    bindingTask?.id,
+    bindingTask?.provided_role_name,
+    bindingTask?.provided_server,
+    bindingTask?.provided_uid,
+  ]);
+
+  useEffect(() => {
+    if (!closureRecord) {
+      return;
+    }
+    setClosureRemark('');
+    setClosureTags((closureRecord.tag_updates?.add ?? []).join(', '));
+    setKnowledgeFeedback(closureRecord.knowledge_feedback ?? '');
+  }, [closureRecord]);
 
   useEffect(() => {
     if (!session) {
@@ -118,7 +162,7 @@ export default function SessionDetail({
   }, [session, t]);
 
   const handleClaim = async () => {
-    if (!session) return;
+    if (!session || isClosed) return;
     setClaiming(true);
     try {
       await httpClient.claimServiceDeskSession(session.session_id);
@@ -220,6 +264,83 @@ export default function SessionDetail({
     }
   };
 
+  const handleSaveBinding = async () => {
+    if (!session || isClosed) return;
+    setSavingBinding(true);
+    try {
+      const requestedFields =
+        bindingTask?.requested_fields && bindingTask.requested_fields.length > 0
+          ? bindingTask.requested_fields
+          : ['uid', 'server'];
+      const providedValues: Record<string, string> = {
+        uid: bindingUid.trim(),
+        server: bindingServer.trim(),
+        role_name: bindingRoleName.trim(),
+      };
+      const isCompleted = requestedFields.every(
+        (field) => (providedValues[field] || '').trim().length > 0,
+      );
+      const resp = await httpClient.upsertServiceDeskBindingTask(
+        session.session_id,
+        {
+          requested_fields: requestedFields,
+          provided_uid: providedValues.uid || undefined,
+          provided_server: providedValues.server || undefined,
+          provided_role_name: providedValues.role_name || undefined,
+          verify_status: isCompleted ? 'completed' : 'pending',
+        },
+      );
+      setDetail((prev) =>
+        prev ? { ...prev, binding_task: resp.binding_task } : prev,
+      );
+      toast.success(t('serviceDesk.workbench.bindingSaveSuccess'));
+    } catch (error) {
+      console.error('Failed to save service desk binding task:', error);
+      toast.error(t('serviceDesk.workbench.bindingSaveError'));
+    } finally {
+      setSavingBinding(false);
+    }
+  };
+
+  const handleCloseSession = async () => {
+    if (!session || isClosed) return;
+    setClosingSession(true);
+    try {
+      const resp = await httpClient.closeServiceDeskSession(session.session_id, {
+        resolution_type: 'answered',
+        tag_updates: {
+          add: closureTags
+            .split(/[\n,]/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+          remove: [],
+        },
+        remark_text: closureRemark.trim() || undefined,
+        followup_needed: false,
+        knowledge_feedback: knowledgeFeedback.trim() || undefined,
+      });
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              closure_record: resp.closure_record,
+              session: {
+                ...prev.session,
+                queue_status: 'closed',
+              },
+            }
+          : prev,
+      );
+      toast.success(t('serviceDesk.workbench.closeSuccess'));
+      await onRefresh();
+    } catch (error) {
+      console.error('Failed to close service desk session:', error);
+      toast.error(t('serviceDesk.workbench.closeError'));
+    } finally {
+      setClosingSession(false);
+    }
+  };
+
   if (!session) {
     return (
       <Card className="flex h-full min-h-0 min-h-[420px] flex-col justify-center rounded-3xl border-dashed xl:min-h-0">
@@ -279,10 +400,10 @@ export default function SessionDetail({
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">
-              {t(`serviceDesk.queueStatus.${session.queue_status}`)}
+              {t(`serviceDesk.queueStatus.${detailSession?.queue_status || session.queue_status}`)}
             </Badge>
             <Badge variant="secondary">
-              {t(`serviceDesk.mode.${session.mode}`)}
+              {t(`serviceDesk.mode.${detailSession?.mode || session.mode}`)}
             </Badge>
           </div>
         </div>
@@ -313,6 +434,251 @@ export default function SessionDetail({
               emptyText={t('serviceDesk.workbench.noTimeline')}
             />
           </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.leadTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.leadDescription')}
+                </div>
+              </div>
+              {lead ? (
+                <div className="grid gap-2 text-sm">
+                  <div>
+                    {t('serviceDesk.workbench.leadExternalUser')} ·{' '}
+                    <span className="font-medium">{lead.external_userid}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadFollowUser')} ·{' '}
+                    <span className="font-medium">{lead.follow_user_id}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadSourceState')} ·{' '}
+                    <span className="font-medium">{lead.source_state || '--'}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadProfileStatus')} ·{' '}
+                    <span className="font-medium">{lead.profile_status}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadTags')} ·{' '}
+                    <span className="font-medium">
+                      {lead.current_tags.length > 0
+                        ? lead.current_tags.join(', ')
+                        : '--'}
+                    </span>
+                  </div>
+                  <div>
+                    UID ·{' '}
+                    <span className="font-medium">
+                      {lead.bound_game_identity?.uid || '--'}
+                    </span>
+                  </div>
+                  <div>
+                    Server ·{' '}
+                    <span className="font-medium">
+                      {lead.bound_game_identity?.server || '--'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {t('serviceDesk.workbench.leadEmpty')}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.routingTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.routingDescription')}
+                </div>
+              </div>
+              {routingDecisions.length > 0 ? (
+                <div className="space-y-2">
+                  {routingDecisions.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium">{item.decision}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(item.created_at)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {item.trigger_type} · {item.trigger_reason}
+                        {item.matched_rule ? ` · ${item.matched_rule}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {t('serviceDesk.workbench.routingEmpty')}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.bindingTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.bindingDescription')}
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="binding-uid">
+                    {t('serviceDesk.workbench.bindingUidLabel')}
+                  </Label>
+                  <Input
+                    id="binding-uid"
+                    value={bindingUid}
+                    onChange={(event) => setBindingUid(event.target.value)}
+                    placeholder={t('serviceDesk.workbench.bindingUidPlaceholder')}
+                    disabled={savingBinding || isClosed}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="binding-server">
+                    {t('serviceDesk.workbench.bindingServerLabel')}
+                  </Label>
+                  <Input
+                    id="binding-server"
+                    value={bindingServer}
+                    onChange={(event) => setBindingServer(event.target.value)}
+                    placeholder={t(
+                      'serviceDesk.workbench.bindingServerPlaceholder',
+                    )}
+                    disabled={savingBinding || isClosed}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="binding-role-name">
+                    {t('serviceDesk.workbench.bindingRoleNameLabel')}
+                  </Label>
+                  <Input
+                    id="binding-role-name"
+                    value={bindingRoleName}
+                    onChange={(event) => setBindingRoleName(event.target.value)}
+                    placeholder={t(
+                      'serviceDesk.workbench.bindingRoleNamePlaceholder',
+                    )}
+                    disabled={savingBinding || isClosed}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {bindingTask
+                    ? `${t('serviceDesk.workbench.bindingStatus')} · ${bindingTask.verify_status}`
+                    : t('serviceDesk.workbench.bindingEmpty')}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSaveBinding()}
+                  disabled={savingBinding || isClosed}
+                >
+                  {savingBinding
+                    ? t('common.saving')
+                    : t('serviceDesk.workbench.bindingSave')}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  {t('serviceDesk.workbench.closureTitle')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t('serviceDesk.workbench.closureDescription')}
+                </div>
+              </div>
+              {closureRecord ? (
+                <div className="space-y-2 text-sm">
+                  <div>
+                    {t('serviceDesk.workbench.closureResolution')} ·{' '}
+                    <span className="font-medium">
+                      {closureRecord.resolution_type}
+                    </span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.closureTags')} ·{' '}
+                    <span className="font-medium">
+                      {(closureRecord.tag_updates?.add ?? []).join(', ') || '--'}
+                    </span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.closureOperator')} ·{' '}
+                    <span className="font-medium">{closureRecord.closed_by}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.closureTime')} ·{' '}
+                    <span className="font-medium">
+                      {formatDateTime(closureRecord.created_at)}
+                    </span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.closureFeedback')} ·{' '}
+                    <span className="font-medium">
+                      {closureRecord.knowledge_feedback || '--'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Textarea
+                    rows={3}
+                    value={closureTags}
+                    onChange={(event) => setClosureTags(event.target.value)}
+                    placeholder={t('serviceDesk.workbench.closureTagsPlaceholder')}
+                    disabled={closingSession}
+                  />
+                  <Textarea
+                    rows={3}
+                    value={closureRemark}
+                    onChange={(event) => setClosureRemark(event.target.value)}
+                    placeholder={t('serviceDesk.workbench.closureRemarkPlaceholder')}
+                    disabled={closingSession}
+                  />
+                  <Textarea
+                    rows={3}
+                    value={knowledgeFeedback}
+                    onChange={(event) =>
+                      setKnowledgeFeedback(event.target.value)
+                    }
+                    placeholder={t(
+                      'serviceDesk.workbench.closureFeedbackPlaceholder',
+                    )}
+                    disabled={closingSession}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={() => void handleCloseSession()}
+                      disabled={closingSession}
+                    >
+                      {closingSession
+                        ? t('common.saving')
+                        : t('serviceDesk.workbench.closeAction')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="shrink-0 border-t bg-muted/10 px-6 py-5">
@@ -329,7 +695,10 @@ export default function SessionDetail({
                       {t('serviceDesk.workbench.assistDraftHint')}
                     </div>
                   </div>
-                  <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-950">
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-100 text-amber-950"
+                  >
                     {t('serviceDesk.workbench.assistDraftBadge')}
                   </Badge>
                 </div>
@@ -357,9 +726,11 @@ export default function SessionDetail({
                   {t('serviceDesk.workbench.sendReply')}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {canReply
-                    ? t('serviceDesk.workbench.replyPlaceholder')
-                    : t('serviceDesk.workbench.claimHint')}
+                  {isClosed
+                    ? t('serviceDesk.workbench.closedHint')
+                    : canReply
+                      ? t('serviceDesk.workbench.replyPlaceholder')
+                      : t('serviceDesk.workbench.claimHint')}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -367,7 +738,7 @@ export default function SessionDetail({
                   type="button"
                   variant="outline"
                   onClick={() => void handleClaim()}
-                  disabled={claiming || session.queue_status === 'manual'}
+                  disabled={claiming || canReply || isClosed}
                 >
                   {t('serviceDesk.workbench.claimAction')}
                 </Button>
@@ -375,7 +746,7 @@ export default function SessionDetail({
                   type="button"
                   variant="outline"
                   onClick={() => void handleRelease()}
-                  disabled={!canRelease || releasing}
+                  disabled={!canRelease || releasing || isClosed}
                 >
                   {t('serviceDesk.workbench.releaseAction')}
                 </Button>
@@ -391,7 +762,7 @@ export default function SessionDetail({
                   type="button"
                   variant="secondary"
                   onClick={() => void handleGenerateAssistDraft()}
-                  disabled={generatingDraft}
+                  disabled={generatingDraft || isClosed}
                 >
                   <Sparkles className="size-4" />
                   {t('serviceDesk.workbench.generateAssistDraft')}
@@ -419,13 +790,13 @@ export default function SessionDetail({
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
                 placeholder={t('serviceDesk.workbench.replyPlaceholder')}
-                disabled={!canReply || sending}
+                disabled={!canReply || sending || isClosed}
               />
               <div className="flex justify-end">
                 <Button
                   type="button"
                   onClick={() => void handleReply()}
-                  disabled={!canReply || !replyText.trim() || sending}
+                  disabled={!canReply || !replyText.trim() || sending || isClosed}
                 >
                   {t('serviceDesk.workbench.sendReply')}
                 </Button>

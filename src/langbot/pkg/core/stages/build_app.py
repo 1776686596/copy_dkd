@@ -29,6 +29,7 @@ from ...api.http.service import apikey as apikey_service
 from ...api.http.service import webhook as webhook_service
 from ...api.http.service import monitoring as monitoring_service
 from ...api.http.service import service_desk as service_desk_service
+from ...api.http.service import wecom_private as wecom_private_service
 from ...discover import engine as discover_engine
 from ...storage import mgr as storagemgr
 from ...utils import logcache
@@ -85,6 +86,9 @@ class BuildAppStage(stage.BootingStage):
 
         service_desk_service_inst = service_desk_service.ServiceDeskService(ap)
         ap.service_desk_service = service_desk_service_inst
+
+        wecom_private_service_inst = wecom_private_service.WecomPrivateService(ap)
+        ap.wecom_private_service = wecom_private_service_inst
 
         proxy_mgr = proxy.ProxyManager(ap)
         await proxy_mgr.initialize()

@@ -62,7 +62,7 @@ import {
   groupByCategory,
   getCategoryLabel,
 } from '@/app/infra/entities/adapter-categories';
-import { resolveWecomWebLoginUiState } from './wecomWebLoginState';
+import { resolveWecomHostedLoginUiState } from './wecomWebLoginState';
 import { PhotoProvider, PhotoView } from 'react-photo-view';
 
 const getFormSchema = (t: (key: string) => string) =>
@@ -165,6 +165,9 @@ export default function BotForm({
   // Watch adapter and adapter_config for filtering
   const currentAdapter = form.watch('adapter');
   const currentAdapterConfig = form.watch('adapter_config');
+  const isHostedWecomAdapter = ['wecomweb', 'wecomprivate'].includes(
+    currentAdapter,
+  );
 
   // Group adapters by category for the Select dropdown
   const groupedAdapters = useMemo(
@@ -225,7 +228,7 @@ export default function BotForm({
   );
 
   useEffect(() => {
-    if (!initBotId || currentAdapter !== 'wecomweb') {
+    if (!initBotId || !isHostedWecomAdapter) {
       loginRequestTokenRef.current += 1;
       clearWecomWebLoginPolling();
       setWecomWebBotEnabled(false);
@@ -253,14 +256,14 @@ export default function BotForm({
     };
   }, [
     clearWecomWebLoginPolling,
-    currentAdapter,
     initBotId,
+    isHostedWecomAdapter,
     refreshWecomWebLoginState,
   ]);
 
-  const wecomWebLoginUiState =
-    initBotId && currentAdapter === 'wecomweb'
-      ? resolveWecomWebLoginUiState({
+  const wecomHostedLoginUiState =
+    initBotId && isHostedWecomAdapter
+      ? resolveWecomHostedLoginUiState({
           hasLoadedState: loginStateLoaded,
           botEnabled: wecomWebBotEnabled,
           loginStateChecked,
@@ -725,31 +728,31 @@ export default function BotForm({
             )}
 
             {initBotId &&
-              currentAdapter === 'wecomweb' &&
-              wecomWebLoginUiState && (
+              isHostedWecomAdapter &&
+              wecomHostedLoginUiState && (
                 <div className="rounded-lg border bg-muted/20 p-4">
                   <div className="space-y-2">
                     <div>
-                      <p className="text-sm font-medium">企业微信网页登录</p>
+                      <p className="text-sm font-medium">企微托管登录</p>
                       <p className="text-sm text-muted-foreground">
                         保持当前页面打开即可；如登录失效，会自动显示新的二维码。
                       </p>
                     </div>
 
-                    {wecomWebLoginUiState.panelState === 'qrcode' &&
-                    wecomWebLoginUiState.qrImageSrc ? (
+                    {wecomHostedLoginUiState.panelState === 'qrcode' &&
+                    wecomHostedLoginUiState.qrImageSrc ? (
                       <PhotoProvider>
                         <div className="space-y-2">
                           <div className="flex justify-center rounded-md bg-background p-4">
-                            <PhotoView src={wecomWebLoginUiState.qrImageSrc}>
+                            <PhotoView src={wecomHostedLoginUiState.qrImageSrc}>
                               <button
                                 type="button"
                                 className="rounded-md transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                 title="点击放大登录图"
                               >
                                 <img
-                                  src={wecomWebLoginUiState.qrImageSrc}
-                                  alt="企业微信网页登录预览图"
+                                  src={wecomHostedLoginUiState.qrImageSrc}
+                                  alt="企微托管登录预览图"
                                   className="h-56 w-56 max-w-full cursor-zoom-in rounded-md object-contain sm:h-72 sm:w-72"
                                 />
                               </button>
@@ -760,20 +763,20 @@ export default function BotForm({
                           </p>
                         </div>
                       </PhotoProvider>
-                    ) : wecomWebLoginUiState.panelState === 'error' ? (
+                    ) : wecomHostedLoginUiState.panelState === 'error' ? (
                       <p className="text-sm text-muted-foreground">
                         {loginQrLoadError}，系统会继续自动重试。
                       </p>
-                    ) : wecomWebLoginUiState.panelState === 'disabled' ? (
+                    ) : wecomHostedLoginUiState.panelState === 'disabled' ? (
                       <p className="text-sm text-muted-foreground">
                         当前 Bot
-                        未启用；启用后才会开始检查企业微信网页登录状态。
+                        未启用；启用后才会开始检查企微托管登录状态。
                       </p>
-                    ) : wecomWebLoginUiState.panelState === 'checking' ? (
+                    ) : wecomHostedLoginUiState.panelState === 'checking' ? (
                       <p className="text-sm text-muted-foreground">
                         正在检查当前登录状态，如需扫码会自动显示二维码。
                       </p>
-                    ) : wecomWebLoginUiState.panelState === 'generating' ? (
+                    ) : wecomHostedLoginUiState.panelState === 'generating' ? (
                       <p className="text-sm text-muted-foreground">
                         正在生成登录二维码，请稍等片刻。
                       </p>

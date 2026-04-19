@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import re
 import uuid
@@ -11,6 +12,7 @@ import sqlalchemy
 from ....core import app
 from ....entity.persistence import monitoring as persistence_monitoring
 from ....entity.persistence import service_desk as persistence_service_desk
+from ....entity.persistence import pipeline as persistence_pipeline
 
 
 def _utcnow() -> datetime.datetime:
@@ -144,6 +146,31 @@ class ServiceDeskService:
         return any(keyword.strip().lower() in normalized for keyword in keywords)
 
     @staticmethod
+    def _is_unresolved_followup(message_text: str) -> bool:
+        normalized = str(message_text or '').strip().lower()
+        unresolved_markers = [
+            '没解决',
+            '没有解决',
+            '未解决',
+            '还是不行',
+            '还是不可以',
+            '还是失败',
+            '仍然不行',
+            '依然不行',
+            '还是有问题',
+        ]
+        return any(marker in normalized for marker in unresolved_markers)
+
+    @staticmethod
+    def _match_handoff_keyword(message_text: str, keywords: list[str]) -> str | None:
+        normalized = message_text.strip().lower()
+        for keyword in keywords:
+            candidate = keyword.strip()
+            if candidate and candidate.lower() in normalized:
+                return candidate
+        return None
+
+    @staticmethod
     def _build_reply_context(source) -> dict[str, str]:
         return {
             'source_entry_id': str(ServiceDeskService._get_value(source, 'source_entry_id', '') or ''),
@@ -163,6 +190,140 @@ class ServiceDeskService:
         if len(normalized) <= limit:
             return normalized
         return f'{normalized[: limit - 3].rstrip()}...'
+
+    @staticmethod
+    async def _call_async_method(target, method_name: str, *args, **kwargs):
+        method = getattr(target, method_name, None)
+        if method is None or not inspect.iscoroutinefunction(method):
+            return None
+        return await method(*args, **kwargs)
+
+    async def _load_pipeline_config(self, pipeline_uuid: str) -> dict:
+        if not pipeline_uuid:
+            return {}
+
+        runtime_pipeline = await self._call_async_method(
+            getattr(self.ap, 'pipeline_mgr', None),
+            'get_pipeline_by_uuid',
+            pipeline_uuid,
+        )
+        runtime_entity = getattr(runtime_pipeline, 'pipeline_entity', None)
+        runtime_config = getattr(runtime_entity, 'config', None)
+        if isinstance(runtime_config, dict):
+            return runtime_config
+
+        result = await self._call_async_method(
+            getattr(self.ap, 'persistence_mgr', None),
+            'execute_async',
+            sqlalchemy.select(persistence_pipeline.LegacyPipeline).where(
+                persistence_pipeline.LegacyPipeline.uuid == pipeline_uuid
+            ),
+        )
+        if result is None:
+            return {}
+
+        row = self._unwrap_model(result.first())
+        config = self._get_value(row, 'config', {})
+        return config if isinstance(config, dict) else {}
+
+    async def _get_wecom_private_welcome_text(self, pipeline_uuid: str) -> str:
+        config = await self._load_pipeline_config(pipeline_uuid)
+        ai_config = config.get('ai', {}) if isinstance(config, dict) else {}
+        if not isinstance(ai_config, dict):
+            return ''
+
+        local_agent_config = ai_config.get('local-agent', {})
+        if not isinstance(local_agent_config, dict):
+            return ''
+
+        opening_intro = local_agent_config.get('opening-intro')
+        if not isinstance(opening_intro, str):
+            return ''
+
+        return opening_intro.strip()
+
+    async def _get_wecom_private_reception_config(self, bot_uuid: str) -> dict:
+        config = await self._call_async_method(
+            getattr(self.ap, 'wecom_private_service', None),
+            'get_reception_config',
+            bot_uuid,
+        )
+        default_config = {
+            'bot_uuid': bot_uuid,
+            'reception_enabled': True,
+            'welcome_enabled': True,
+            'fallback_reply_text': '',
+            'binding_required_fields': ['uid', 'server'],
+            'binding_trigger_keywords': [],
+            'binding_prompt_text': '',
+        }
+        if isinstance(config, dict):
+            default_config.update(config)
+        return default_config
+
+    @staticmethod
+    def _build_reply_material(reply_text: str) -> dict:
+        return {
+            'material_type': 'quick_reply',
+            'title': 'AI Reception',
+            'reply_text': str(reply_text or '').strip(),
+            'trigger_keywords': [],
+            'payload': {},
+            'priority': 0,
+            'enabled': True,
+        }
+
+    @staticmethod
+    def _extract_binding_values(message_text: str) -> dict[str, str]:
+        text = str(message_text or '')
+        patterns = {
+            'uid': r'(?:uid|角色id)[:：\s]*([A-Za-z0-9_-]+)',
+            'server': r'(?:区服|服务器)[:：\s]*([A-Za-z0-9_-]+)',
+            'role_name': r'(?:角色名|角色名称)[:：\s]*([^\s,，]+)',
+        }
+        values: dict[str, str] = {}
+        for key, pattern in patterns.items():
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                values[key] = match.group(1).strip()
+        return values
+
+    async def _send_wecom_private_welcome_message_if_needed(
+        self,
+        *,
+        bot_entity,
+        source_event,
+        pipeline_uuid: str,
+        reception_config: dict | None = None,
+    ) -> None:
+        if getattr(bot_entity, 'adapter', None) != 'wecomprivate':
+            return
+        if not self._get_value(reception_config, 'reception_enabled', True):
+            return
+        if not self._get_value(reception_config, 'welcome_enabled', True):
+            return
+
+        welcome_code = str(getattr(source_event, 'welcome_code', '') or '').strip()
+        if not welcome_code:
+            return
+
+        welcome_text = await self._get_wecom_private_welcome_text(pipeline_uuid)
+        if not welcome_text:
+            return
+
+        try:
+            await self._call_async_method(
+                getattr(self.ap, 'wecom_private_service', None),
+                'send_welcome_message',
+                bot_uuid=bot_entity.uuid,
+                welcome_code=welcome_code,
+                text=welcome_text,
+            )
+        except Exception as exc:
+            logger = getattr(self.ap, 'logger', None)
+            if logger is not None and hasattr(logger, 'warning'):
+                logger.warning(f'Failed to send wecom private welcome message: {exc}')
+            return
 
     @classmethod
     def _extract_preview_component_text(cls, component: dict) -> str:
@@ -493,6 +654,7 @@ class ServiceDeskService:
         context: dict[str, str],
         sender_name: str | None,
         queue_status: str | None = None,
+        lead_id: str | None = None,
     ) -> persistence_service_desk.ServiceDeskSession:
         session = await self._get_session(session_id)
         now = _utcnow()
@@ -507,6 +669,8 @@ class ServiceDeskService:
         }
         if queue_status is not None:
             update_values['queue_status'] = queue_status
+        if lead_id is not None:
+            update_values['lead_id'] = lead_id
 
         if session is None:
             payload = {
@@ -519,12 +683,13 @@ class ServiceDeskService:
                 'external_user_id': context['external_user_id'],
                 'last_message_id': context['last_message_id'],
                 'claimed_by_user_uuid': None,
-                'claimed_by_user_name': sender_name,
+                'claimed_by_user_name': None,
                 'manual_claimed_at': None,
                 'silent_since': None,
                 'last_customer_message_at': now,
                 'last_manual_reply_at': None,
                 'unresolved_count': 0,
+                'lead_id': lead_id,
             }
             await self.ap.persistence_mgr.execute_async(
                 sqlalchemy.insert(persistence_service_desk.ServiceDeskSession).values(payload)
@@ -554,6 +719,18 @@ class ServiceDeskService:
         if not context.get('source_entry_id') or not context.get('external_user_id'):
             return ServiceDeskDecision(action='continue_ai')
 
+        wecom_private_service = getattr(self.ap, 'wecom_private_service', None)
+        lead = None
+        if getattr(bot_entity, 'adapter', None) == 'wecomprivate':
+            lead = await self._call_async_method(
+                wecom_private_service,
+                'bootstrap_private_lead',
+                bot_uuid=bot_entity.uuid,
+                external_user_id=context['external_user_id'],
+                follow_user_id=str(getattr(source_event, 'follow_user_id', '') or ''),
+                source_entry_id=context['source_entry_id'],
+            )
+
         session_id = self._get_session_id(event, adapter)
         session = await self._touch_session(
             session_id=session_id,
@@ -561,6 +738,17 @@ class ServiceDeskService:
             pipeline_uuid=pipeline_uuid or getattr(bot_entity, 'use_pipeline_uuid', '') or '',
             context=context,
             sender_name=self._get_sender_name(event),
+            lead_id=self._get_value(lead, 'id'),
+        )
+        reception_config = {}
+        if getattr(bot_entity, 'adapter', None) == 'wecomprivate':
+            reception_config = await self._get_wecom_private_reception_config(bot_entity.uuid)
+        resolved_pipeline_uuid = pipeline_uuid or getattr(bot_entity, 'use_pipeline_uuid', '') or ''
+        await self._send_wecom_private_welcome_message_if_needed(
+            bot_entity=bot_entity,
+            source_event=source_event,
+            pipeline_uuid=resolved_pipeline_uuid,
+            reception_config=reception_config,
         )
         config = await self.get_bot_config(bot_entity.uuid)
 
@@ -593,7 +781,8 @@ class ServiceDeskService:
             )
             session = await self._get_session(session_id)
 
-        if self._get_value(session, 'queue_status') == 'manual':
+        queue_status = self._get_value(session, 'queue_status')
+        if queue_status in {'manual', 'pending_manual'}:
             await self._record_intercepted_customer_message(
                 bot_entity=bot_entity,
                 event=event,
@@ -601,7 +790,7 @@ class ServiceDeskService:
                 context=context,
                 pipeline_uuid=pipeline_uuid,
             )
-            return ServiceDeskDecision(action='skip_pipeline', reason='manual')
+            return ServiceDeskDecision(action='skip_pipeline', reason=queue_status)
 
         materials = await self.list_materials(bot_entity.uuid)
         matched_material = match_material(str(getattr(event, 'message_chain', '')), materials)
@@ -615,20 +804,31 @@ class ServiceDeskService:
             )
             return ServiceDeskDecision(action='send_material', reason='material', material=matched_material)
 
-        if (
-            config is not None
-            and config.get('enabled', True)
-            and self._contains_keyword(
+        matched_keyword = None
+        if config is not None and config.get('enabled', True):
+            matched_keyword = self._match_handoff_keyword(
                 str(getattr(event, 'message_chain', '')),
                 config.get('handoff_keywords', []),
             )
-        ):
+
+        if matched_keyword is not None:
             await self._update_session_state(
                 session_id,
                 mode='manual',
                 queue_status='pending_manual',
                 handoff_reason='keyword',
             )
+            if getattr(bot_entity, 'adapter', None) == 'wecomprivate':
+                await self._call_async_method(
+                    wecom_private_service,
+                    'record_routing_decision',
+                    session_id=session_id,
+                    trigger_type='rule',
+                    trigger_reason='keyword',
+                    decision='pending_manual',
+                    matched_rule=matched_keyword,
+                    confidence=1.0,
+                )
             await self._record_intercepted_customer_message(
                 bot_entity=bot_entity,
                 event=event,
@@ -640,6 +840,129 @@ class ServiceDeskService:
                 action='skip_pipeline',
                 reason='pending_manual',
             )
+
+        if (
+            getattr(bot_entity, 'adapter', None) == 'wecomprivate'
+            and reception_config.get('reception_enabled', True)
+        ):
+            overlay = await self._call_async_method(
+                wecom_private_service,
+                'get_session_overlay',
+                session_id,
+            )
+            binding_task = overlay.get('binding_task') if isinstance(overlay, dict) else None
+            message_text = str(getattr(event, 'message_chain', '') or '')
+            required_fields = reception_config.get('binding_required_fields') or ['uid', 'server']
+            trigger_keywords = reception_config.get('binding_trigger_keywords') or []
+            extracted_values = self._extract_binding_values(message_text)
+            current_values = {
+                'uid': str(self._get_value(binding_task, 'provided_uid', '') or ''),
+                'server': str(self._get_value(binding_task, 'provided_server', '') or ''),
+                'role_name': str(self._get_value(binding_task, 'provided_role_name', '') or ''),
+            }
+            binding_task_pending = (
+                str(self._get_value(binding_task, 'verify_status', '') or '') == 'pending'
+            )
+            merged_values = {
+                key: extracted_values.get(key) or current_values.get(key, '')
+                for key in ('uid', 'server', 'role_name')
+            }
+            missing_fields = [field for field in required_fields if not merged_values.get(field)]
+
+            if (
+                missing_fields
+                and (
+                    self._contains_keyword(message_text, trigger_keywords)
+                    or binding_task_pending
+                )
+            ):
+                await self._call_async_method(
+                    wecom_private_service,
+                    'upsert_binding_task',
+                    session_id=session_id,
+                    data={
+                        'requested_fields': required_fields,
+                        'provided_uid': merged_values.get('uid') or None,
+                        'provided_server': merged_values.get('server') or None,
+                        'provided_role_name': merged_values.get('role_name') or None,
+                        'verify_status': 'pending',
+                    },
+                )
+                await self._record_intercepted_customer_message(
+                    bot_entity=bot_entity,
+                    event=event,
+                    session_id=session_id,
+                    context=context,
+                    pipeline_uuid=pipeline_uuid,
+                )
+                return ServiceDeskDecision(
+                    action='send_material_and_skip',
+                    reason='binding_required',
+                    material=self._build_reply_material(
+                        reception_config.get('binding_prompt_text')
+                        or '请补充 UID / 区服 信息'
+                    ),
+                )
+
+            if binding_task_pending and not missing_fields:
+                await self._call_async_method(
+                    wecom_private_service,
+                    'upsert_binding_task',
+                    session_id=session_id,
+                    data={
+                        'requested_fields': required_fields,
+                        'provided_uid': merged_values.get('uid') or None,
+                        'provided_server': merged_values.get('server') or None,
+                        'provided_role_name': merged_values.get('role_name') or None,
+                        'verify_status': 'completed',
+                    },
+                )
+
+            if self._is_unresolved_followup(message_text):
+                next_unresolved_count = int(
+                    self._get_value(session, 'unresolved_count', 0) or 0
+                ) + 1
+                fallback_threshold = int(
+                    (config or {}).get('fallback_unresolved_count', 2) or 2
+                )
+                fallback_reply_text = str(
+                    reception_config.get('fallback_reply_text') or ''
+                ).strip()
+                if next_unresolved_count >= fallback_threshold and fallback_reply_text:
+                    await self._update_session_state(
+                        session_id,
+                        unresolved_count=next_unresolved_count,
+                        mode='manual',
+                        queue_status='pending_manual',
+                        handoff_reason='fallback_unresolved',
+                    )
+                    await self._call_async_method(
+                        wecom_private_service,
+                        'record_routing_decision',
+                        session_id=session_id,
+                        trigger_type='fallback',
+                        trigger_reason='unresolved_threshold',
+                        decision='pending_manual',
+                        matched_rule=None,
+                        confidence=1.0,
+                    )
+                    await self._record_intercepted_customer_message(
+                        bot_entity=bot_entity,
+                        event=event,
+                        session_id=session_id,
+                        context=context,
+                        pipeline_uuid=pipeline_uuid,
+                    )
+                    return ServiceDeskDecision(
+                        action='send_material_and_skip',
+                        reason='fallback_route',
+                        material=self._build_reply_material(fallback_reply_text),
+                    )
+
+                await self._update_session_state(
+                    session_id,
+                    unresolved_count=next_unresolved_count,
+                )
 
         return ServiceDeskDecision(action='continue_ai')
 
@@ -779,11 +1102,27 @@ class ServiceDeskService:
             if runtime_bot is not None:
                 bot_payload['name'] = getattr(getattr(runtime_bot, 'bot_entity', None), 'name', None)
 
+        overlay = {
+            'lead': None,
+            'routing_decisions': [],
+            'binding_task': None,
+            'closure_record': None,
+        }
+        wecom_private_service = getattr(self.ap, 'wecom_private_service', None)
+        overlay_payload = await self._call_async_method(
+            wecom_private_service,
+            'get_session_overlay',
+            session_id,
+        )
+        if isinstance(overlay_payload, dict):
+            overlay = overlay_payload
+
         return {
             'session': serialized_session,
             'messages': messages,
             'bot': bot_payload,
             'assist_draft': None,
+            **overlay,
         }
 
     async def release_session(self, session_id: str) -> None:

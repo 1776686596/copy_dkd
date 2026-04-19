@@ -48,15 +48,19 @@ const QUEUE_FILTERS: ServiceDeskQueueFilter[] = [
   'manual',
   'silent',
   'ai',
+  'closed',
 ];
 
 function isServiceDeskBot(bot: Bot): bot is ServiceDeskBot {
-  return Boolean(bot.uuid) && ['wecomcs', 'lark'].includes(bot.adapter);
+  return Boolean(bot.uuid) && ['wecomcs', 'lark', 'wecomprivate'].includes(bot.adapter);
 }
 
 function getChannelLabel(adapter: string, t: ReturnType<typeof useTranslation>['t']) {
   if (adapter === 'lark') {
     return t('serviceDesk.channels.lark');
+  }
+  if (adapter === 'wecomprivate') {
+    return t('serviceDesk.channels.wecomprivate');
   }
   return t('serviceDesk.channels.wecomcs');
 }
@@ -65,12 +69,18 @@ function getChannelBadgeClass(adapter: string) {
   if (adapter === 'lark') {
     return 'border-sky-200 bg-sky-50 text-sky-700';
   }
+  if (adapter === 'wecomprivate') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
 }
 
 function getChannelSurfaceClass(adapter: string) {
   if (adapter === 'lark') {
     return 'bg-[linear-gradient(160deg,rgba(240,249,255,0.98),rgba(255,255,255,0.94)_45%,rgba(224,242,254,0.88))]';
+  }
+  if (adapter === 'wecomprivate') {
+    return 'bg-[linear-gradient(160deg,rgba(255,251,235,0.98),rgba(255,255,255,0.94)_45%,rgba(254,243,199,0.9))]';
   }
   return 'bg-[linear-gradient(160deg,rgba(240,253,244,0.98),rgba(255,255,255,0.94)_45%,rgba(220,252,231,0.88))]';
 }

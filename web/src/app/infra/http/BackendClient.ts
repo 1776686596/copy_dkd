@@ -54,6 +54,11 @@ import {
   ServiceDeskMaterial,
   ServiceDeskSessionQuery,
   ServiceDeskSession,
+  WecomPrivateBindingTask,
+  WecomPrivateClosureRecord,
+  WecomPrivateContactConfig,
+  WecomPrivateReceptionConfig,
+  WecomPrivateReceptionConfigUpdatePayload,
 } from '@/app/infra/entities/api';
 import { Plugin } from '@/app/infra/entities/plugin';
 import { GetBotLogsRequest } from '@/app/infra/http/requestParam/bots/GetBotLogsRequest';
@@ -432,6 +437,41 @@ export class BackendClient extends BaseHttpClient {
     return this.get(`/api/v1/service-desk/sessions/${sessionId}`);
   }
 
+  public getWecomPrivateContactConfigs(
+    botUuid: string,
+  ): Promise<{ items: WecomPrivateContactConfig[] }> {
+    return this.get('/api/v1/wecom-private/contact-configs', { botUuid });
+  }
+
+  public getWecomPrivateReceptionConfig(
+    botUuid: string,
+  ): Promise<{ config: WecomPrivateReceptionConfig }> {
+    return this.get(`/api/v1/wecom-private/reception-config/${botUuid}`);
+  }
+
+  public updateWecomPrivateReceptionConfig(
+    botUuid: string,
+    payload: WecomPrivateReceptionConfigUpdatePayload,
+  ): Promise<{ config: WecomPrivateReceptionConfig }> {
+    return this.put(`/api/v1/wecom-private/reception-config/${botUuid}`, payload);
+  }
+
+  public syncWecomPrivatePrimaryContactConfig(
+    botUuid: string,
+    payload: {
+      follow_user_id: string;
+      state: string;
+      remark: string;
+    },
+  ): Promise<{ item: WecomPrivateContactConfig }> {
+    return this.post('/api/v1/wecom-private/contact-configs/sync-primary', {
+      bot_uuid: botUuid,
+      follow_user_id: payload.follow_user_id,
+      state: payload.state,
+      remark: payload.remark,
+    });
+  }
+
   public getServiceDeskBotConfigs(): Promise<{
     items: ServiceDeskBotConfig[];
   }> {
@@ -501,6 +541,35 @@ export class BackendClient extends BaseHttpClient {
     return this.post(`/api/v1/service-desk/sessions/${sessionId}/reply`, {
       reply_text: replyText,
     });
+  }
+
+  public upsertServiceDeskBindingTask(
+    sessionId: string,
+    payload: {
+      requested_fields: string[];
+      provided_uid?: string;
+      provided_server?: string;
+      provided_role_name?: string;
+      verify_status?: 'pending' | 'completed' | 'manual_verified';
+    },
+  ): Promise<{ binding_task: WecomPrivateBindingTask }> {
+    return this.post(
+      `/api/v1/service-desk/sessions/${sessionId}/binding-task`,
+      payload,
+    );
+  }
+
+  public closeServiceDeskSession(
+    sessionId: string,
+    payload: {
+      resolution_type: string;
+      tag_updates: Record<string, string[]>;
+      remark_text?: string;
+      followup_needed?: boolean;
+      knowledge_feedback?: string;
+    },
+  ): Promise<{ closure_record: WecomPrivateClosureRecord }> {
+    return this.post(`/api/v1/service-desk/sessions/${sessionId}/close`, payload);
   }
 
   // ============ File management API ============

@@ -36,6 +36,76 @@ async def test_manual_session_skips_pipeline_enqueue():
 
 
 @pytest.mark.asyncio
+async def test_send_material_continues_pipeline_after_reply():
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskDecision
+    from langbot.pkg.platform.botmgr import RuntimeBot
+
+    bot = object.__new__(RuntimeBot)
+    bot.bot_entity = Mock()
+    bot.ap = Mock()
+    bot.logger = Mock()
+    bot.logger.info = AsyncMock()
+    bot.ap.service_desk_service = Mock()
+    bot.ap.service_desk_service.handle_incoming_message = AsyncMock(
+        return_value=ServiceDeskDecision(
+            action='send_material',
+            reason='material',
+            material={'reply_text': '点击这里下载'},
+        )
+    )
+    bot.ap.service_desk_service.send_structured_reply = AsyncMock()
+
+    event = Mock()
+    adapter = Mock()
+
+    handled = await bot._handle_service_desk_before_pipeline(event, adapter)
+
+    assert handled is False
+    bot.ap.service_desk_service.send_structured_reply.assert_awaited_once_with(
+        runtime_bot=bot,
+        event=event,
+        adapter=adapter,
+        material={'reply_text': '点击这里下载'},
+    )
+    bot.logger.info.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_material_and_skip_stops_pipeline_after_reply():
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskDecision
+    from langbot.pkg.platform.botmgr import RuntimeBot
+
+    bot = object.__new__(RuntimeBot)
+    bot.bot_entity = Mock()
+    bot.ap = Mock()
+    bot.logger = Mock()
+    bot.logger.info = AsyncMock()
+    bot.ap.service_desk_service = Mock()
+    bot.ap.service_desk_service.handle_incoming_message = AsyncMock(
+        return_value=ServiceDeskDecision(
+            action='send_material_and_skip',
+            reason='binding_required',
+            material={'reply_text': '请补充 UID / 区服'},
+        )
+    )
+    bot.ap.service_desk_service.send_structured_reply = AsyncMock()
+
+    event = Mock()
+    adapter = Mock()
+
+    handled = await bot._handle_service_desk_before_pipeline(event, adapter)
+
+    assert handled is True
+    bot.ap.service_desk_service.send_structured_reply.assert_awaited_once_with(
+        runtime_bot=bot,
+        event=event,
+        adapter=adapter,
+        material={'reply_text': '请补充 UID / 区服'},
+    )
+    bot.logger.info.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_ai_assist_mode_does_not_auto_send():
     from types import SimpleNamespace
 
@@ -139,6 +209,61 @@ async def test_wecomweb_message_enters_service_desk_flow():
     adapter.extract_service_desk_context.return_value = {
         'source_entry_id': 'escort-account',
         'external_user_id': 'external-customer-1',
+        'last_message_id': 'msg-1',
+    }
+
+    handled = await bot._handle_service_desk_before_pipeline(
+        event,
+        adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+    assert handled is False
+    bot.ap.service_desk_service.handle_incoming_message.assert_awaited_once_with(
+        bot_entity=bot.bot_entity,
+        event=event,
+        adapter=adapter,
+        pipeline_uuid='pipeline-1',
+    )
+
+
+@pytest.mark.asyncio
+async def test_wecomprivate_message_enters_service_desk_flow():
+    from types import SimpleNamespace
+
+    from langbot.pkg.api.http.service.service_desk import ServiceDeskDecision
+    from langbot.pkg.platform.botmgr import RuntimeBot
+
+    bot = object.__new__(RuntimeBot)
+    bot.bot_entity = SimpleNamespace(
+        adapter='wecomprivate',
+        uuid='bot-1',
+        use_pipeline_uuid='pipeline-1',
+    )
+    bot.ap = Mock()
+    bot.logger = Mock()
+    bot.logger.info = AsyncMock()
+    bot.ap.service_desk_service = Mock()
+    bot.ap.service_desk_service.handle_incoming_message = AsyncMock(
+        return_value=ServiceDeskDecision(action='continue_ai')
+    )
+    bot.ap.service_desk_service.send_structured_reply = AsyncMock()
+
+    event = SimpleNamespace(
+        message_chain='我要人工',
+        sender=SimpleNamespace(id='wo123', nickname='客户A'),
+        source_platform_object=SimpleNamespace(
+            source_entry_id='cfg-1',
+            external_user_id='wo123',
+            last_message_id='msg-1',
+            follow_user_id='zhangsan',
+        ),
+    )
+    adapter = Mock()
+    adapter.get_launcher_id.return_value = 'cfg-1:wo123'
+    adapter.extract_service_desk_context.return_value = {
+        'source_entry_id': 'cfg-1',
+        'external_user_id': 'wo123',
         'last_message_id': 'msg-1',
     }
 

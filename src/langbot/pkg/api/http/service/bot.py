@@ -53,7 +53,7 @@ class BotService:
             raise Exception('Bot not found')
 
         adapter_runtime_values = {}
-        if persistence_bot['adapter'] == 'wecomweb':
+        if persistence_bot['adapter'] in {'wecomweb', 'wecomprivate'}:
             adapter_runtime_values['login_state_checked'] = False
             adapter_runtime_values['login_required'] = False
             adapter_runtime_values['login_qr_image_base64'] = None
@@ -62,7 +62,7 @@ class BotService:
         runtime_bot = await self.ap.platform_mgr.get_bot_by_uuid(bot_uuid)
         if runtime_bot is not None:
             adapter_runtime_values['bot_account_id'] = runtime_bot.adapter.bot_account_id
-            if persistence_bot['adapter'] == 'wecomweb':
+            if persistence_bot['adapter'] in {'wecomweb', 'wecomprivate'}:
                 get_state = getattr(getattr(runtime_bot.adapter, 'bot', None), 'get_login_runtime_state', None)
                 if callable(get_state):
                     adapter_runtime_values.update(get_state())
