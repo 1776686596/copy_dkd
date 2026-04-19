@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Any
 
 
@@ -15,7 +14,6 @@ class WecomPrivatePageClient:
         logger=None,
         poll_interval_seconds: int = 2,
         headless: bool = True,
-        print_login_qr: bool = True,
         browser_executable_path: str | None = None,
     ) -> None:
         self.entry_id = entry_id
@@ -24,16 +22,11 @@ class WecomPrivatePageClient:
         self.logger = logger
         self.poll_interval_seconds = poll_interval_seconds
         self.headless = headless
-        self.print_login_qr = print_login_qr
         self.browser_executable_path = browser_executable_path.strip() if browser_executable_path else None
 
         self._stop_event = asyncio.Event()
         self._message_callback = None
         self._send_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-        self._login_state_checked = False
-        self._login_required = False
-        self._login_qr_image_base64: str | None = None
-        self._login_qr_updated_at: int | None = None
 
     @staticmethod
     def _as_bool(value: Any, default: bool) -> bool:
@@ -54,39 +47,11 @@ class WecomPrivatePageClient:
             logger=logger,
             poll_interval_seconds=int(config.get('poll_interval_seconds', 2) or 2),
             headless=cls._as_bool(config.get('headless'), True),
-            print_login_qr=cls._as_bool(config.get('print_login_qr'), True),
             browser_executable_path=config.get('browser_executable_path'),
         )
 
     def set_message_callback(self, callback) -> None:
         self._message_callback = callback
-
-    def get_login_runtime_state(self) -> dict[str, Any]:
-        return {
-            'login_state_checked': self._login_state_checked,
-            'login_required': self._login_required,
-            'login_qr_image_base64': self._login_qr_image_base64,
-            'login_qr_updated_at': self._login_qr_updated_at,
-        }
-
-    def set_login_runtime_state(
-        self,
-        *,
-        checked: bool,
-        required: bool,
-        qr_image_base64: str | None = None,
-        updated_at: int | None = None,
-    ) -> None:
-        self._login_state_checked = checked
-        self._login_required = required
-        self._login_qr_image_base64 = qr_image_base64
-        self._login_qr_updated_at = updated_at if updated_at is not None else int(time.time())
-
-    def clear_login_runtime_state(self) -> None:
-        self._login_state_checked = True
-        self._login_required = False
-        self._login_qr_image_base64 = None
-        self._login_qr_updated_at = None
 
     async def send_text(self, *, conversation_id: str, external_user_id: str, text: str) -> dict[str, str]:
         payload = {

@@ -147,7 +147,7 @@ async def test_handle_incoming_message_accepts_any_adapter_with_service_desk_con
     service.list_materials = AsyncMock(return_value=[])
 
     bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         use_pipeline_uuid='pipeline-1',
     )
@@ -755,7 +755,7 @@ async def test_handle_incoming_message_records_user_message_when_manual_session_
     service.list_materials = AsyncMock(return_value=[])
 
     bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         name='客服机器人',
         use_pipeline_uuid='pipeline-1',
@@ -797,7 +797,7 @@ async def test_handle_incoming_message_records_user_message_when_manual_session_
         session_id='person_escort-account:external-customer-1',
         status='success',
         level='info',
-        platform='wecomweb',
+        platform='wecomcs',
         user_id='external-customer-1',
         user_name='客户A',
         role='user',
@@ -829,7 +829,7 @@ async def test_handle_incoming_message_records_user_message_when_pending_manual_
     service.list_materials = AsyncMock(return_value=[])
 
     bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         name='客服机器人',
         use_pipeline_uuid='pipeline-1',
@@ -888,7 +888,7 @@ async def test_handle_incoming_message_records_user_message_when_keyword_handoff
     service._update_session_state = AsyncMock()
 
     bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         name='客服机器人',
         use_pipeline_uuid='pipeline-1',
@@ -1473,7 +1473,7 @@ async def test_handle_incoming_message_records_user_message_when_material_reply_
     )
 
     bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         name='客服机器人',
         use_pipeline_uuid='pipeline-1',

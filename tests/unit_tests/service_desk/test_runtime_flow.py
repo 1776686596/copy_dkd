@@ -179,7 +179,7 @@ def test_wecomcs_adapter_extracts_service_desk_context():
 
 
 @pytest.mark.asyncio
-async def test_wecomweb_message_enters_service_desk_flow():
+async def test_generic_service_desk_message_enters_flow():
     from types import SimpleNamespace
 
     from langbot.pkg.api.http.service.service_desk import ServiceDeskDecision
@@ -187,7 +187,7 @@ async def test_wecomweb_message_enters_service_desk_flow():
 
     bot = object.__new__(RuntimeBot)
     bot.bot_entity = SimpleNamespace(
-        adapter='wecomweb',
+        adapter='wecomcs',
         uuid='bot-1',
         use_pipeline_uuid='pipeline-1',
     )

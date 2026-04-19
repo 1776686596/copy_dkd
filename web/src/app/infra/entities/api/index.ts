@@ -136,10 +136,6 @@ export interface BotAdapterRuntimeValues {
   webhook_url?: string | null;
   webhook_full_url?: string | null;
   extra_webhook_full_url?: string | null;
-  login_state_checked?: boolean;
-  login_required?: boolean;
-  login_qr_image_base64?: string | null;
-  login_qr_updated_at?: number | null;
 }
 
 export interface ServiceDeskBotConfig {

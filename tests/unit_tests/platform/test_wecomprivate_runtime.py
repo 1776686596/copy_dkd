@@ -5,7 +5,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_wecomprivate_runtime_returns_login_defaults_without_runtime_bot():
+async def test_wecomprivate_runtime_returns_basic_runtime_values_without_login_state():
     from langbot.pkg.api.http.service.bot import BotService
 
     service = BotService(
@@ -27,15 +27,11 @@ async def test_wecomprivate_runtime_returns_login_defaults_without_runtime_bot()
         'webhook_url': None,
         'webhook_full_url': None,
         'extra_webhook_full_url': None,
-        'login_state_checked': False,
-        'login_required': False,
-        'login_qr_image_base64': None,
-        'login_qr_updated_at': None,
     }
 
 
 @pytest.mark.asyncio
-async def test_wecomprivate_runtime_uses_adapter_login_state_when_available():
+async def test_wecomprivate_runtime_keeps_bot_account_id_without_login_state():
     from langbot.pkg.api.http.service.bot import BotService
 
     service = BotService(
@@ -45,14 +41,7 @@ async def test_wecomprivate_runtime_uses_adapter_login_state_when_available():
                     return_value=SimpleNamespace(
                         adapter=SimpleNamespace(
                             bot_account_id='private-entry',
-                            bot=SimpleNamespace(
-                                get_login_runtime_state=lambda: {
-                                    'login_state_checked': True,
-                                    'login_required': True,
-                                    'login_qr_image_base64': 'cached-qr',
-                                    'login_qr_updated_at': 1710000000,
-                                }
-                            ),
+                            bot=SimpleNamespace(),
                         )
                     )
                 )
@@ -74,8 +63,4 @@ async def test_wecomprivate_runtime_uses_adapter_login_state_when_available():
         'webhook_url': None,
         'webhook_full_url': None,
         'extra_webhook_full_url': None,
-        'login_state_checked': True,
-        'login_required': True,
-        'login_qr_image_base64': 'cached-qr',
-        'login_qr_updated_at': 1710000000,
     }

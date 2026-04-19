@@ -1,5 +1,4 @@
 import React, {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -62,8 +61,6 @@ import {
   groupByCategory,
   getCategoryLabel,
 } from '@/app/infra/entities/adapter-categories';
-import { resolveWecomHostedLoginUiState } from './wecomWebLoginState';
-import { PhotoProvider, PhotoView } from 'react-photo-view';
 
 const getFormSchema = (t: (key: string) => string) =>
   z.object({
@@ -151,23 +148,10 @@ export default function BotForm({
   const [, setIsLoading] = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState<string>('');
   const [extraWebhookUrl, setExtraWebhookUrl] = useState<string>('');
-  const [wecomWebBotEnabled, setWecomWebBotEnabled] = useState<boolean>(false);
-  const [loginRequired, setLoginRequired] = useState<boolean>(false);
-  const [loginStateLoaded, setLoginStateLoaded] = useState<boolean>(false);
-  const [loginStateChecked, setLoginStateChecked] = useState<boolean>(false);
-  const [loginQrImageBase64, setLoginQrImageBase64] = useState<string | null>(
-    null,
-  );
-  const [loginQrLoadError, setLoginQrLoadError] = useState<string | null>(null);
-  const loginPollingRef = useRef<number | null>(null);
-  const loginRequestTokenRef = useRef(0);
 
   // Watch adapter and adapter_config for filtering
   const currentAdapter = form.watch('adapter');
   const currentAdapterConfig = form.watch('adapter_config');
-  const isHostedWecomAdapter = ['wecomweb', 'wecomprivate'].includes(
-    currentAdapter,
-  );
 
   // Group adapters by category for the Select dropdown
   const groupedAdapters = useMemo(
@@ -186,92 +170,6 @@ export default function BotForm({
   useEffect(() => {
     setBotFormValuesRef.current();
   }, []);
-
-  const clearWecomWebLoginPolling = useCallback(() => {
-    if (loginPollingRef.current !== null) {
-      window.clearInterval(loginPollingRef.current);
-      loginPollingRef.current = null;
-    }
-  }, []);
-
-  const refreshWecomWebLoginState = useCallback(
-    async (botId: string, requestToken: number) => {
-      try {
-        const res = await httpClient.getBot(botId);
-        if (loginRequestTokenRef.current !== requestToken) {
-          return;
-        }
-        const runtimeValues = res.bot.adapter_runtime_values;
-        setWecomWebBotEnabled(res.bot.enable ?? false);
-        const nextLoginStateChecked =
-          runtimeValues?.login_state_checked === true;
-        const nextLoginRequired = runtimeValues?.login_required === true;
-
-        setLoginStateLoaded(true);
-        setLoginStateChecked(nextLoginStateChecked);
-        setLoginRequired(nextLoginRequired);
-        setLoginQrLoadError(null);
-        setLoginQrImageBase64(
-          nextLoginRequired
-            ? (runtimeValues?.login_qr_image_base64 ?? null)
-            : null,
-        );
-      } catch {
-        if (loginRequestTokenRef.current !== requestToken) {
-          return;
-        }
-        setLoginStateLoaded(true);
-        setLoginQrLoadError('登录状态拉取失败，请稍后刷新页面重试');
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!initBotId || !isHostedWecomAdapter) {
-      loginRequestTokenRef.current += 1;
-      clearWecomWebLoginPolling();
-      setWecomWebBotEnabled(false);
-      setLoginStateLoaded(false);
-      setLoginStateChecked(false);
-      setLoginRequired(false);
-      setLoginQrImageBase64(null);
-      setLoginQrLoadError(null);
-      return;
-    }
-
-    const botId = initBotId;
-    const requestToken = loginRequestTokenRef.current + 1;
-    loginRequestTokenRef.current = requestToken;
-    clearWecomWebLoginPolling();
-    setLoginStateLoaded(false);
-    void refreshWecomWebLoginState(botId, requestToken);
-    loginPollingRef.current = window.setInterval(() => {
-      void refreshWecomWebLoginState(botId, requestToken);
-    }, 3000);
-
-    return () => {
-      loginRequestTokenRef.current += 1;
-      clearWecomWebLoginPolling();
-    };
-  }, [
-    clearWecomWebLoginPolling,
-    initBotId,
-    isHostedWecomAdapter,
-    refreshWecomWebLoginState,
-  ]);
-
-  const wecomHostedLoginUiState =
-    initBotId && isHostedWecomAdapter
-      ? resolveWecomHostedLoginUiState({
-          hasLoadedState: loginStateLoaded,
-          botEnabled: wecomWebBotEnabled,
-          loginStateChecked,
-          loginRequired,
-          loginQrImageBase64,
-          loginQrLoadError,
-        })
-      : null;
 
   function setBotFormValues() {
     isInitializing.current = true;
@@ -726,68 +624,6 @@ export default function BotForm({
                 }}
               />
             )}
-
-            {initBotId &&
-              isHostedWecomAdapter &&
-              wecomHostedLoginUiState && (
-                <div className="rounded-lg border bg-muted/20 p-4">
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-sm font-medium">企微托管登录</p>
-                      <p className="text-sm text-muted-foreground">
-                        保持当前页面打开即可；如登录失效，会自动显示新的二维码。
-                      </p>
-                    </div>
-
-                    {wecomHostedLoginUiState.panelState === 'qrcode' &&
-                    wecomHostedLoginUiState.qrImageSrc ? (
-                      <PhotoProvider>
-                        <div className="space-y-2">
-                          <div className="flex justify-center rounded-md bg-background p-4">
-                            <PhotoView src={wecomHostedLoginUiState.qrImageSrc}>
-                              <button
-                                type="button"
-                                className="rounded-md transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                title="点击放大登录图"
-                              >
-                                <img
-                                  src={wecomHostedLoginUiState.qrImageSrc}
-                                  alt="企微托管登录预览图"
-                                  className="h-56 w-56 max-w-full cursor-zoom-in rounded-md object-contain sm:h-72 sm:w-72"
-                                />
-                              </button>
-                            </PhotoView>
-                          </div>
-                          <p className="text-center text-xs text-muted-foreground">
-                            点击图片可放大扫码。
-                          </p>
-                        </div>
-                      </PhotoProvider>
-                    ) : wecomHostedLoginUiState.panelState === 'error' ? (
-                      <p className="text-sm text-muted-foreground">
-                        {loginQrLoadError}，系统会继续自动重试。
-                      </p>
-                    ) : wecomHostedLoginUiState.panelState === 'disabled' ? (
-                      <p className="text-sm text-muted-foreground">
-                        当前 Bot
-                        未启用；启用后才会开始检查企微托管登录状态。
-                      </p>
-                    ) : wecomHostedLoginUiState.panelState === 'checking' ? (
-                      <p className="text-sm text-muted-foreground">
-                        正在检查当前登录状态，如需扫码会自动显示二维码。
-                      </p>
-                    ) : wecomHostedLoginUiState.panelState === 'generating' ? (
-                      <p className="text-sm text-muted-foreground">
-                        正在生成登录二维码，请稍等片刻。
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        当前已登录，无需扫码；如果登录失效，这里会自动出现二维码。
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
           </CardContent>
         </Card>
       </form>
