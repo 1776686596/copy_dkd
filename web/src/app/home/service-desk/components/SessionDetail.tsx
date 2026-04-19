@@ -72,6 +72,19 @@ export default function SessionDetail({
   const routingDecisions = detail?.routing_decisions ?? [];
   const bindingTask = detail?.binding_task ?? null;
   const closureRecord = detail?.closure_record ?? null;
+  const leadUserLayerLabel = lead
+    ? t(`serviceDesk.workbench.userLayer.${lead.user_layer}`, {
+        defaultValue: lead.user_layer,
+      })
+    : '--';
+  const leadLayerSourceLabel = lead
+    ? t(`serviceDesk.workbench.layerSource.${lead.layer_source}`, {
+        defaultValue: lead.layer_source,
+      })
+    : '--';
+  const leadSignals = (lead?.profile_signals ?? []).map((item) =>
+    t(`serviceDesk.workbench.profileSignal.${item}`, { defaultValue: item }),
+  );
   const supportsWecomPrivateOps =
     (detail?.bot?.adapter ?? botAdapter) === 'wecomprivate';
   const isClosed =
@@ -466,6 +479,26 @@ export default function SessionDetail({
                   <div>
                     {t('serviceDesk.workbench.leadProfileStatus')} ·{' '}
                     <span className="font-medium">{lead.profile_status}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadUserLayer')} ·{' '}
+                    <span className="font-medium">{leadUserLayerLabel}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadLayerSource')} ·{' '}
+                    <span className="font-medium">{leadLayerSourceLabel}</span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadProfileSignals')} ·{' '}
+                    <span className="font-medium">
+                      {leadSignals.length > 0 ? leadSignals.join(', ') : '--'}
+                    </span>
+                  </div>
+                  <div>
+                    {t('serviceDesk.workbench.leadLayerUpdatedAt')} ·{' '}
+                    <span className="font-medium">
+                      {formatDateTime(lead.layer_updated_at)}
+                    </span>
                   </div>
                   <div>
                     {t('serviceDesk.workbench.leadTags')} ·{' '}

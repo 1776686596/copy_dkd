@@ -144,6 +144,32 @@ async def test_send_welcome_message_calls_external_contact_client():
 
 
 @pytest.mark.asyncio
+async def test_bootstrap_private_lead_sets_default_layer_fields():
+    from langbot.pkg.api.http.service.wecom_private import WecomPrivateService
+
+    ap = Mock()
+    service = WecomPrivateService(ap)
+    service._get_lead_by_external_userid = AsyncMock(return_value=None)
+    service._build_external_contact_client = AsyncMock()
+    service._build_external_contact_client.return_value.get_external_contact = AsyncMock(
+        return_value={'external_contact': {}, 'follow_user': []}
+    )
+    service._insert_lead = AsyncMock(side_effect=lambda payload: payload)
+    service._refresh_lead_profile = AsyncMock(side_effect=lambda lead, **_: lead)
+
+    result = await service.bootstrap_private_lead(
+        bot_uuid='bot-1',
+        external_user_id='ext-1',
+        follow_user_id='staff-1',
+        source_entry_id='entry-1',
+    )
+
+    assert result['user_layer'] == 'normal'
+    assert result['layer_source'] == 'system'
+    assert result['profile_signals'] == []
+
+
+@pytest.mark.asyncio
 async def test_get_reception_config_returns_default_when_missing():
     from langbot.pkg.api.http.service.wecom_private import WecomPrivateService
 
@@ -258,6 +284,81 @@ async def test_upsert_reception_config_preserves_existing_fields_on_partial_upda
         'binding_prompt_text': '旧提示',
         'human_handoff_direct_enabled': False,
     }
+
+
+@pytest.mark.asyncio
+async def test_upsert_binding_task_completes_bound_identity_and_profile_status():
+    from langbot.pkg.api.http.service.wecom_private import WecomPrivateService
+
+    ap = Mock()
+    service = WecomPrivateService(ap)
+    service._assert_wecom_private_session = AsyncMock(return_value={'session_id': 'person_ext-1'})
+    service._get_binding_task = AsyncMock(return_value=None)
+    service._upsert_binding_task_row = AsyncMock(
+        side_effect=lambda payload: {
+            **payload,
+            'provided_uid': payload.get('provided_uid'),
+            'provided_server': payload.get('provided_server'),
+            'provided_role_name': payload.get('provided_role_name'),
+        }
+    )
+    service._get_session = AsyncMock(
+        return_value={'session_id': 'person_ext-1', 'lead_id': 'lead-1'}
+    )
+    service._get_lead = AsyncMock(
+        return_value={
+            'id': 'lead-1',
+            'profile_status': 'binding_requested',
+            'bound_game_identity': {},
+            'current_tags': [],
+            'remark_snapshot': {},
+            'source_state': 'dkd-entry',
+            'first_add_time': None,
+        }
+    )
+    service._update_lead = AsyncMock(side_effect=lambda lead_id, payload: payload)
+
+    await service.upsert_binding_task(
+        session_id='person_ext-1',
+        data={
+            'requested_fields': ['uid', 'server', 'role_name'],
+            'provided_uid': '10001',
+            'provided_server': 's1',
+            'provided_role_name': '战士阿明',
+            'verify_status': 'completed',
+        },
+    )
+
+    service._update_lead.assert_awaited_once()
+    update_payload = service._update_lead.await_args.kwargs['payload']
+    assert update_payload['profile_status'] == 'bound'
+    assert update_payload['bound_game_identity']['uid'] == '10001'
+    assert update_payload['bound_game_identity']['server'] == 's1'
+    assert update_payload['bound_game_identity']['role_name'] == '战士阿明'
+
+
+@pytest.mark.asyncio
+async def test_refresh_lead_profile_prefers_big_r_over_vip_and_new_user():
+    from langbot.pkg.api.http.service.wecom_private import WecomPrivateService
+
+    ap = Mock()
+    service = WecomPrivateService(ap)
+
+    lead = {
+        'id': 'lead-1',
+        'current_tags': ['VIP玩家', '大R用户'],
+        'remark_snapshot': {'remark': '已确认大R'},
+        'source_state': 'dkd_campaign',
+        'first_add_time': datetime.datetime.utcnow(),
+        'profile_status': 'anonymous',
+        'bound_game_identity': {},
+    }
+
+    result = await service._refresh_lead_profile(lead)
+
+    assert result['user_layer'] == 'big_r'
+    assert result['layer_source'] == 'signal'
+    assert 'tag_big_r' in result['profile_signals']
 
 
 @pytest.mark.asyncio

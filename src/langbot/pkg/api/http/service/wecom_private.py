@@ -137,10 +137,21 @@ class WecomPrivateService:
             'first_add_time': self._extract_first_add_time(remote, follow_user_id),
             'current_tags': self._extract_current_tags(remote, follow_user_id),
             'profile_status': 'anonymous',
+            'user_layer': 'normal',
+            'layer_source': 'system',
+            'profile_signals': [],
+            'layer_updated_at': None,
             'bound_game_identity': {},
             'remark_snapshot': self._extract_remark_snapshot(remote, follow_user_id),
         }
-        return await self._insert_lead(payload)
+        lead = await self._insert_lead(payload)
+        refreshed = await self._refresh_lead_profile(lead)
+        if self._lead_profile_changed(lead, refreshed):
+            return await self._update_lead(
+                self._get_value(lead, 'id'),
+                payload=self._build_lead_profile_update_payload(refreshed),
+            )
+        return refreshed
 
     async def send_welcome_message(
         self,
@@ -257,7 +268,7 @@ class WecomPrivateService:
         return await self._insert_routing_decision(payload)
 
     async def upsert_binding_task(self, *, session_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        await self._assert_wecom_private_session(session_id)
+        session = await self._assert_wecom_private_session(session_id)
         existing = await self._get_binding_task(session_id)
         payload = dict(existing or {})
         payload['id'] = self._get_value(existing, 'id') or data.get('id') or str(uuid.uuid4())
@@ -284,7 +295,16 @@ class WecomPrivateService:
             else:
                 payload['completed_at'] = None
 
-        return await self._upsert_binding_task_row(payload)
+        task = await self._upsert_binding_task_row(payload)
+        lead = await self._get_lead(self._get_value(session, 'lead_id'))
+        if lead is not None:
+            refreshed = await self._refresh_lead_profile(lead, binding_task=task)
+            if self._lead_profile_changed(lead, refreshed):
+                await self._update_lead(
+                    self._get_value(lead, 'id'),
+                    payload=self._build_lead_profile_update_payload(refreshed),
+                )
+        return task
 
     async def close_private_session(
         self,
@@ -503,6 +523,14 @@ class WecomPrivateService:
         )
         return self._serialize(persistence_service_desk.WecomPrivateLead, result.first())
 
+    async def _update_lead(self, lead_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.update(persistence_service_desk.WecomPrivateLead)
+            .where(persistence_service_desk.WecomPrivateLead.id == lead_id)
+            .values({**payload, 'updated_at': sqlalchemy.func.now()})
+        )
+        return await self._get_lead(lead_id)
+
     async def _insert_routing_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         await self.ap.persistence_mgr.execute_async(
             sqlalchemy.insert(persistence_service_desk.WecomPrivateRoutingDecision).values(payload)
@@ -680,6 +708,89 @@ class WecomPrivateService:
             )
         )
 
+    async def _refresh_lead_profile(
+        self,
+        lead: dict[str, Any],
+        *,
+        binding_task: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        identity = dict(self._get_value(lead, 'bound_game_identity', {}) or {})
+        verify_status = str(self._get_value(binding_task, 'verify_status', '') or '')
+
+        if verify_status in {'completed', 'manual_verified'}:
+            if self._get_value(binding_task, 'provided_uid'):
+                identity['uid'] = self._get_value(binding_task, 'provided_uid')
+            if self._get_value(binding_task, 'provided_server'):
+                identity['server'] = self._get_value(binding_task, 'provided_server')
+            if self._get_value(binding_task, 'provided_role_name'):
+                identity['role_name'] = self._get_value(binding_task, 'provided_role_name')
+
+        if identity.get('uid') or identity.get('server'):
+            profile_status = 'bound'
+        elif binding_task is not None:
+            profile_status = 'binding_requested'
+        else:
+            profile_status = 'anonymous'
+
+        signals: list[str] = []
+        tags = [
+            str(item).strip().lower()
+            for item in self._get_value(lead, 'current_tags', []) or []
+            if str(item).strip()
+        ]
+        remark_text = str(
+            self._get_value(self._get_value(lead, 'remark_snapshot', {}), 'remark') or ''
+        ).lower()
+        source_state = str(self._get_value(lead, 'source_state') or '').lower()
+
+        if any('大r' in item or 'bigr' in item for item in tags) or '大r' in remark_text:
+            signals.append('tag_big_r')
+            user_layer = 'big_r'
+        elif any('vip' in item for item in tags) or 'vip' in remark_text or 'vip' in source_state:
+            signals.append('tag_vip')
+            user_layer = 'vip'
+        elif self._is_recent_new_contact(self._get_value(lead, 'first_add_time')):
+            signals.append('new_contact_7d')
+            user_layer = 'new_user'
+        else:
+            user_layer = 'normal'
+
+        if profile_status == 'bound':
+            signals.append('binding_completed')
+
+        layer_source = 'signal' if signals else 'system'
+        return {
+            **lead,
+            'profile_status': profile_status,
+            'bound_game_identity': identity,
+            'user_layer': user_layer,
+            'layer_source': layer_source,
+            'profile_signals': signals,
+            'layer_updated_at': _utcnow(),
+        }
+
+    @staticmethod
+    def _build_lead_profile_update_payload(lead: dict[str, Any]) -> dict[str, Any]:
+        return {
+            'profile_status': lead.get('profile_status', 'anonymous'),
+            'bound_game_identity': lead.get('bound_game_identity') or {},
+            'user_layer': lead.get('user_layer', 'normal'),
+            'layer_source': lead.get('layer_source', 'system'),
+            'profile_signals': lead.get('profile_signals') or [],
+            'layer_updated_at': lead.get('layer_updated_at'),
+        }
+
+    @classmethod
+    def _lead_profile_changed(cls, current: dict[str, Any], refreshed: dict[str, Any]) -> bool:
+        keys = (
+            'profile_status',
+            'bound_game_identity',
+            'user_layer',
+            'layer_source',
+            'profile_signals',
+        )
+        return any(cls._get_value(current, key) != cls._get_value(refreshed, key) for key in keys)
+
     @staticmethod
     def _get_follow_user_record(remote: dict[str, Any], follow_user_id: str) -> dict[str, Any]:
         follow_users = remote.get('follow_user', [])
@@ -692,6 +803,12 @@ class WecomPrivateService:
     def _extract_source_state(cls, remote: dict[str, Any], follow_user_id: str, fallback: str) -> str:
         follow_user = cls._get_follow_user_record(remote, follow_user_id)
         return str(follow_user.get('state') or fallback)
+
+    @staticmethod
+    def _is_recent_new_contact(value: Any) -> bool:
+        if not isinstance(value, datetime.datetime):
+            return False
+        return value >= (_utcnow() - datetime.timedelta(days=7))
 
     @staticmethod
     def _normalize_text(value: Any) -> str:

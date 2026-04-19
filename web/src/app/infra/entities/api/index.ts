@@ -217,10 +217,14 @@ export interface WecomPrivateLead {
   source_state?: string | null;
   current_tags: string[];
   profile_status: 'anonymous' | 'binding_requested' | 'bound';
+  user_layer: 'normal' | 'new_user' | 'vip' | 'big_r';
+  layer_source: 'system' | 'signal';
+  profile_signals: string[];
   bound_game_identity: Record<string, string | null>;
   remark_snapshot: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
+  layer_updated_at?: string | null;
 }
 
 export interface WecomPrivateRoutingDecision {

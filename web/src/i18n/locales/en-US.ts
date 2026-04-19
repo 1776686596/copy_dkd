@@ -392,8 +392,28 @@ const enUS = {
       leadFollowUser: 'Owner',
       leadSourceState: 'Source State',
       leadProfileStatus: 'Profile Status',
+      leadUserLayer: 'User Layer',
+      leadLayerSource: 'Layer Source',
+      leadProfileSignals: 'Profile Signals',
+      leadLayerUpdatedAt: 'Last Refreshed',
       leadTags: 'Current Tags',
       leadEmpty: 'No private-domain lead data is available for this session yet',
+      userLayer: {
+        normal: 'Normal User',
+        new_user: 'New User',
+        vip: 'VIP',
+        big_r: 'Big R',
+      },
+      layerSource: {
+        system: 'System Default',
+        signal: 'Signal Matched',
+      },
+      profileSignal: {
+        tag_vip: 'VIP signal matched',
+        tag_big_r: 'Big-R signal matched',
+        new_contact_7d: 'New contact within 7 days',
+        binding_completed: 'Identity binding completed',
+      },
       routingTitle: 'Routing Decisions',
       routingDescription:
         'Keep routing decisions for later review when a rule sends the session to manual handling.',

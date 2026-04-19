@@ -236,7 +236,15 @@ async def test_get_session_detail_returns_messages_and_overlay():
     )
     ap.wecom_private_service.get_session_overlay = AsyncMock(
         return_value={
-            'lead': {'id': 'lead-1', 'external_userid': 'wo123', 'profile_status': 'anonymous'},
+            'lead': {
+                'id': 'lead-1',
+                'external_userid': 'wo123',
+                'profile_status': 'bound',
+                'user_layer': 'vip',
+                'layer_source': 'signal',
+                'profile_signals': ['tag_vip', 'binding_completed'],
+                'layer_updated_at': '2026-04-19T23:40:00',
+            },
             'routing_decisions': [{'decision': 'pending_manual', 'trigger_reason': 'keyword'}],
             'binding_task': {
                 'session_id': 'person_u1001',
@@ -268,6 +276,9 @@ async def test_get_session_detail_returns_messages_and_overlay():
     assert detail['bot']['uuid'] == 'bot-1'
     assert detail['bot']['adapter'] == 'wecomprivate'
     assert detail['lead']['id'] == 'lead-1'
+    assert detail['lead']['user_layer'] == 'vip'
+    assert detail['lead']['layer_source'] == 'signal'
+    assert detail['lead']['profile_signals'] == ['tag_vip', 'binding_completed']
     assert detail['routing_decisions'][0]['decision'] == 'pending_manual'
     assert detail['binding_task']['verify_status'] == 'pending'
     assert detail['binding_task']['provided_role_name'] == '战士阿明'

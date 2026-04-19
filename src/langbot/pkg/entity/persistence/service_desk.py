@@ -87,6 +87,20 @@ class WecomPrivateLead(Base):
         default='anonymous',
         server_default='anonymous',
     )
+    user_layer = sqlalchemy.Column(
+        sqlalchemy.String(50),
+        nullable=False,
+        default='normal',
+        server_default='normal',
+    )
+    layer_source = sqlalchemy.Column(
+        sqlalchemy.String(50),
+        nullable=False,
+        default='system',
+        server_default='system',
+    )
+    profile_signals = sqlalchemy.Column(sqlalchemy.JSON, nullable=False, server_default='[]')
+    layer_updated_at = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)
     bound_game_identity = sqlalchemy.Column(sqlalchemy.JSON, nullable=False, server_default='{}')
     remark_snapshot = sqlalchemy.Column(sqlalchemy.JSON, nullable=False, server_default='{}')
     created_at = sqlalchemy.Column(sqlalchemy.DateTime, nullable=False, server_default=sqlalchemy.func.now())

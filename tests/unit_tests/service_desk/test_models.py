@@ -1,10 +1,10 @@
 import sqlalchemy
 
 
-def test_required_database_version_is_29():
+def test_required_database_version_is_30():
     from langbot.pkg.utils import constants
 
-    assert constants.required_database_version == 29
+    assert constants.required_database_version == 30
 
 
 def test_wecom_private_models_exist():
@@ -40,3 +40,16 @@ def test_wecom_private_models_exist():
     assert binding_columns['provided_role_name'].nullable is True
     assert isinstance(WecomPrivateClosureRecord.__table__.c['tag_updates'].type, sqlalchemy.JSON)
     assert WecomPrivateRoutingDecision.__table__.c['decision'].nullable is False
+
+
+def test_wecom_private_lead_layering_columns_exist():
+    from langbot.pkg.entity.persistence.service_desk import WecomPrivateLead
+
+    lead_columns = WecomPrivateLead.__table__.c
+
+    assert isinstance(lead_columns['user_layer'].type, sqlalchemy.String)
+    assert lead_columns['user_layer'].nullable is False
+    assert isinstance(lead_columns['layer_source'].type, sqlalchemy.String)
+    assert lead_columns['layer_source'].nullable is False
+    assert isinstance(lead_columns['profile_signals'].type, sqlalchemy.JSON)
+    assert lead_columns['layer_updated_at'].nullable is True
